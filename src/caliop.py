@@ -255,16 +255,18 @@ class CALIOP:
         return extent
     
 
-    def plot(self, dataset, **kwargs):
+    def plot(self, dataset, fig=None, ax=None, **kwargs):
 
         extent = self.get_extent()
 
         data, lons, lats, times = subset_caliop_profile(self, dataset,
                                                         extent, return_coords=True)
 
-        data_itp = interpolate_caliop_profile(data)
+        data_itp = interpolate_caliop_profile(data, ve1=kwargs.get("min_alt", 0.0)*1000,
+                                                    ve2=kwargs.get("max_alt", 40.)*1000)
 
-        fig, ax = plt.subplots(dpi=300)
+        if fig is None and ax is None:
+            fig, ax = plt.subplots(dpi=300, figsize=(15, 10))
 
         plot_caliop_profile_direct(fig, ax, lons, lats, times, data_itp.T, **kwargs)
         plt.close()
