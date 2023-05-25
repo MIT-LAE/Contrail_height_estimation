@@ -4,8 +4,11 @@ import datetime as dt
 from pyhdf.SD import SD, SDC
 from pyhdf import HDF, VS
 
+import os
 
 from vertical_feature_mask import interpret_vfm
+from visualization import *
+
 from contrails.numerics.algorithms import *
 
 PROJECTION_PATH = '/net/d13/data/vmeijer/reprojections/'
@@ -39,6 +42,13 @@ class CALIOP:
         self.datasets = [ds for ds in self.file.datasets()]
         self.time_bounds = self.get_time_bounds(UTC=True)
         self.read_meta_data()
+
+    def __repr__(self):
+        
+        return f'CALIOP object for file: {os.path.basename(self.path)}'
+    
+    def __str__(self):
+        return f'CALIOP object for file: {os.path.basename(self.path)}'
         
     def read_meta_data(self):
         """
@@ -225,6 +235,43 @@ class CALIOP:
             rows_to_keep = rows[~np.isin(rows, rows_to_keep)]
 
         return rows_to_keep
+    
+
+    def get_extent(self):
+
+        lons = self.get("Longitude")
+        lats = self.get("Latitude")
+
+        lon_start = lons[0,0]
+        lon_end = lons[-1,0]
+        lat_start = lats[0,0]
+        lat_end = lats[-1,0]
+
+        if self.is_ascending():
+            extent = [lon_end, lon_start, lat_start, lat_end]
+        else:
+            extent = [lon_start, lon_end, lat_end, lat_start]
+
+        return extent
+    
+
+    def plot(self, dataset, **kwargs):
+
+        extent = self.get_extent()
+
+        data, lons, lats, times = subset_caliop_profile(self, dataset,
+                                                        extent, return_coords=True)
+
+        data_itp = interpolate_caliop_profile(data)
+
+        fig, ax = plt.subplots(dpi=300)
+
+        plot_caliop_profile_direct(fig, ax, lons, lats, times, data_itp.T, **kwargs)
+        plt.close()
+        return fig
+
+
+
 
 
 def filter_cirrus_feature(fcf):
