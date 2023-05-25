@@ -1,10 +1,20 @@
 from skimage.measure import label, regionprops
-import numpy as np
+import numpy as np, pandas as pd
+import os
+from collections import defaultdict
 
 import datetime as dt
 import scipy.interpolate
+from caliop import *
+from geometry import *
+
 from contrails.meteorology.advection import *
-from contrails.satellites.goes.abi import * 
+from abi import *
+from utils import *
+
+
+# Time when Full Disk GOES-16 product refresh rate changed from 15 to 10 minutes
+TRANSITION_TIME = dt.datetime(2019, 4, 2)
 
 # TODO: Remove me when open sourcing
 ASSET_PATH = "/home/vmeijer/contrails/contrails/satellites/assets/"
@@ -193,6 +203,7 @@ def floor_time(t, minute_res=10):
     else:
         return dt.datetime(t.year, t.month, t.day, t.hour, minutes)
     
+
 def get_pixel_time_parameters(nc):
     scan_mode = int(nc.attrs["timeline_id"].split(" ")[-1])
     scene_id = nc.attrs["scene_id"]
@@ -206,13 +217,7 @@ def get_pixel_time_parameters(nc):
             scene_id += "1"
     return scan_mode, scene_id
 
-def get_pixel_time_LUT(scan_mode):
-    
-    return xr.open_dataset(ASSET_PATH + f"mode{scan_mode}.nc")
-
 def find_closest_product(caliop_time, ABI_FD_row, ABI_FD_col):
-    
-    
     
     ABI_CONUS_row = ABI_FD_row - CONUS_FIRST_ROW
     ABI_CONUS_col = ABI_FD_col - CONUS_FIRST_COL
@@ -228,7 +233,7 @@ def find_closest_product(caliop_time, ABI_FD_row, ABI_FD_col):
         rel_time = np.timedelta64(caliop_time - fd_time)
     
         # Get pixel time look up table
-        ds = get_pixel_time_LUT(3)
+        ds = get_netcdf_asset('mode3')
         
         # Get delta_times for each region
         # Col/row reversal is on purpose due to LUT conventions
@@ -266,7 +271,7 @@ def find_closest_product(caliop_time, ABI_FD_row, ABI_FD_col):
         rel_time = np.timedelta64(caliop_time - fd_time)
     
         # Get pixel time look up table
-        ds = get_pixel_time_LUT(6)
+        ds = get_netcdf_asset("mode6")
         
         # Get delta_times for each region
         fd_t = ds["FD_pixel_times"][ABI_FD_col, ABI_FD_row].values
@@ -305,10 +310,6 @@ def label_scan_rows(lons, lats, boundaries=np.array([0, 229, 483, 737, 991, 1245
     
     return scan_rows
 
-def get_ABI_grid_locations(x, y, dx=5.5998564e-05, dy=5.5998564e-05):
-    cols = np.floor(x/dx).astype(np.int64) + 2712
-    rows = -np.floor(y/dy).astype(np.int64) + 2711
-    return rows, cols
 
 def segment_caliop_product(lons, lats, times):
     
@@ -397,3 +398,344 @@ def extract_heights(profile_ids, cloud_mask, lidar_alts):
     
     return 1000*top_heights, 1000*bot_heights
     
+
+
+def coarse_collocation(path, get_mask, threshold_dist=50.0, conus=False, verbose=False):
+    """
+    Perform a "coarse" collocation of a CALIOP L1 file at 'path' 
+    by checking whether any contrails have been detected on GOES-16 images
+    that were captured during the CALIPSO overpass. 
+
+    Parameters
+    ----------
+    path:  str
+        Location of CALIOP L1 file
+    get_mask : function
+        Function to use for obtaining contrail masks
+    threshold_dist : float (optional)
+        Maximum crosstrack distance for looking for contrails, in km
+    conus : bool (optional)
+        Whether or not to use CONUS data
+    verbose : bool(optional)
+        Control print statements
+
+    Returns
+    -------
+    df : pd.DataFrame
+        Dataframe containing collocation results
+    """
+
+    if verbose:
+        print(f"Started coarse collocation for {os.path.basename(path)}")
+    
+    ca = CALIOP(path)
+
+    times = ca.get_time() 
+    
+    # Take approximate average time 
+    t = times[len(times)//2,0]
+    
+    # Minutes between each ABI-L2-MCMIPF product 
+    if conus:
+        minute_interval = 5
+    else:
+        if t < TRANSITION_TIME:
+            minute_interval = 15
+        else:
+            minute_interval = 10
+    
+    # Get longitudes, latitudes for pixels in the projection used for detection 
+    goes_lon = get_lons()
+    goes_lat = get_lats()
+    
+    # Parameterize CALIPSO ground track
+    orbit = ca.get_ground_track()
+    
+    # Find all pixels within threshold_dist of the CALIPSO ground track 
+    dists = np.abs(orbit.get_crosstrack_distance(goes_lon, goes_lat))
+    collocation_mask = dists <= threshold_dist
+    
+    # Get mask for time 
+    try:
+        mask_time = dt.datetime(t.year, t.month, t.day, t.hour, int(np.round(t.minute/minute_interval)*minute_interval))
+    except ValueError:
+        # Doing it this way takes care of cornercase where the next hour is on the next day
+        next_h = t + dt.timedelta(hours=1)
+        mask_time = dt.datetime(next_h.year, next_h.month, next_h.day, next_h.hour, 0)
+        
+    # if not conus:
+    #     try:
+    #         try:
+    #             mask = get_mask(mask_time, 
+    #                         prediction_dir='/home/vmeijer/covid19/data/predictions_wo_sf/')
+    #         except FileNotFoundError:
+    #             path = "/net/d13/data/vmeijer/data/orthographic_detections_goes16/" \
+    #             + "ABI-L2-MCMIPF" + mask_time.strftime("/%Y/%j/%H/%Y%m%d_%H_%M.csv")
+    #             print(path)
+    #             df = pd.read_csv(path) 
+    #             mask = np.zeros((2000, 3000))
+    #             mask[df.row.values.astype(np.int64), df.col.values.astype(np.int64)] = 1
+                
+    #     except FileNotFoundError:
+    #         print(f"Did not find contrail mask corresponding to {os.path.basename(path)}")
+    #         print("Failed to find " + mask_time.strftime('%Y-%m-%d %H:%M'))
+    #         return
+    # else:
+    mask = get_mask(mask_time, conus=conus)
+
+    collocated = (mask==1.0)*collocation_mask
+    
+    # If any contrail pixels found close to the CALIPSO ground track,
+    # indicate successful collocation
+    if np.sum(collocated) > 0:
+
+        # Extract information on collocated contrails
+        lat_collocated = goes_lat[collocated]
+        lon_collocated = goes_lon[collocated]
+        dists_collocated = dists[collocated]
+        rows, cols = np.where(collocated)
+
+        n_collocated = int(np.sum(collocated))
+
+        df = pd.DataFrame({'caliop_path' : n_collocated * [path],
+                           'caliop_mean_time' : n_collocated * [t],
+                           'detection_time' : n_collocated * [mask_time],
+                            'lat': lat_collocated,
+                            'lon': lon_collocated,
+                            'dist': dists_collocated,
+                            'row': rows,
+                            'col': cols})
+        
+        #df.to_csv(save_path)
+        if verbose:
+            print(f"Finished coarse collocation for {os.path.basename(path)}, found {n_collocated} candidate pixels")
+
+        return df 
+    else:
+        if verbose:
+            print(f"Finished coarse collocation for {os.path.basename(path)}, no contrails found")
+        return pd.DataFrame({"result":["no collocations found"]})
+
+
+
+def fine_collocation(coarse_df, get_mask, get_ERA5_data, verbose=False):
+
+    L1_path = coarse_df.iloc[0].caliop_path
+
+    prep_df = prepare_fine_collocation(coarse_df)
+    
+    if verbose:
+        print(f"Starting fine L1 collocation for {os.path.basename(L1_path)}")
+
+    ca = CALIOP(L1_path)
+    profile_lons = ca.get("Longitude").data[:,0]
+    profile_lats = ca.get("Latitude").data[:,0]
+    profile_ids = np.arange(len(profile_lons))
+
+    ascending = ca.is_ascending()
+
+    # To store results
+    data = defaultdict(list)
+
+    for i in range(len(prep_df)):
+
+        row = prep_df.iloc[i]
+        goes_product = row["product"]
+        goes_time = pd.to_datetime(row.product_time)
+
+        if ascending:
+            lat_min = row.segment_start_lat
+            lat_max = row.segment_end_lat
+        else:
+            lat_min = row.segment_end_lat
+            lat_max = row.segment_start_lat
+
+        subset_idx = (profile_lats >= lat_min) * (profile_lats <= lat_max)
+
+        # Subset caliop data
+        extent = [-135, -45, lat_min, lat_max]
+
+        # b532, lons, lats, times = subset_caliop_profile(ca, "Total_Attenuated_Backscatter_532",
+        #                                         extent, return_coords=True)
+        
+        
+
+        cloud_mask, b532, b1064, lons, lats, times = ca.get_cloud_filter(extent=extent,
+                                            return_backscatters=True, min_alt=8, max_alt=15)
+
+        extent[0] = lons.min()
+        extent[1] = lons.max()
+
+        
+        weather = get_ERA5_data(goes_time)
+
+        heights = np.linspace(8e3, 15e3, cloud_mask.shape[0])[::-1][np.argmax(cloud_mask, axis=0)]
+        heights[heights == 15.0e3] = np.nan
+        ps = map_heights_to_pressure(lons, lats, times, heights, weather)
+        #us, vs = get_interpolated_winds(lons, lats, times, heights, ps, weather)
+
+        if goes_time < TRANSITION_TIME:
+            scan_mode = 3
+        else:
+            scan_mode = 6
+
+        scan_start_time = get_scan_start_time(goes_time, scan_mode, goes_product)
+        pixel_times = get_pixel_times(scan_mode, 11, region=goes_product) + np.datetime64(scan_start_time)
+
+
+        if "CONUS" in goes_product:
+            conus = True
+        else:
+            conus = False
+
+        ABI_extent = map_geodetic_extent_to_ABI(extent, conus=conus)
+        # domain_idx = (goes_lons >= extent[0])*(goes_lons <= extent[1])\
+        #         *(goes_lats >= extent[2])*(goes_lats <= extent[3])
+        sub_times = np.sort(pixel_times[ABI_extent[2]:ABI_extent[3],ABI_extent[0]:ABI_extent[1]].flatten())
+
+        median_idx = len(sub_times)//2
+        advection_time = pd.Timestamp(sub_times[median_idx]).to_pydatetime()
+
+        indices = ~np.isnan(heights)
+
+        # Do advection
+        adv_lons, adv_lats = get_advected_positions(lons[indices], lats[indices], times[indices],
+                                    heights[indices], ps[indices], weather, advection_time)
+        subindices = ~(np.isnan(adv_lons)+np.isnan(adv_lats))
+        adv_lons = adv_lons[subindices]
+        adv_lats = adv_lats[subindices]
+
+        try:
+            # Invert parallax
+            lons_c, lats_c = parallax_correction_vicente_backward(adv_lons, adv_lats,
+                                                                    heights[indices][subindices])
+        except ValueError:
+            print("Parallax correction error")
+            print(goes_time, L1_path)
+            return
+
+
+        x, y = geodetic2ABI(lons_c, lats_c)
+
+        # Map to ABI coordinates
+        ABIgrid_rows, ABIgrid_cols = get_ABI_grid_locations(x,y)
+        
+        # Check contrail matches
+        mask = get_mask(goes_time, conus=True)
+
+        orthographic_ABI_ids = get_ortho_ids()
+        contrail_ids = orthographic_ABI_ids[mask==1.0]
+
+        caliop_ids = 5424*(ABIgrid_rows) + ABIgrid_cols
+        matched = np.isin(caliop_ids, contrail_ids.astype(np.int64))
+
+        # Store results
+        n_matched = int(np.sum(matched).item())
+        
+        if n_matched > 0:
+        
+            data["L1_file"].extend(n_matched*[os.path.basename(L1_path)])
+            data["segment_start_lat"].extend( n_matched*[row.segment_start_lat])
+            data["segment_end_lat"].extend(n_matched*[row.segment_end_lat])
+            data["segment_start_idx"].extend( n_matched*[row.start_profile_id])
+            data["segment_end_idx"].extend( n_matched*[row.end_profile_id])
+            data["profile_id"].extend(list(profile_ids[subset_idx][indices][subindices][matched]))
+            data["caliop_lon"].extend(list(lons[indices][subindices][matched]))
+            data["caliop_lon_adv"].extend(list(adv_lons[matched]))
+            data["caliop_lat"].extend(list(lats[indices][subindices][matched]))
+            data["caliop_lat_adv"].extend(list(adv_lats[matched]))
+            data["caliop_top_height"].extend(list(heights[indices][subindices][matched]))
+            data["caliop_lon_adv_parallax"].extend(list(lons_c[matched]))
+            data["caliop_lat_adv_parallax"].extend(list(lats_c[matched]))
+            data["caliop_time"].extend(list(times[indices][subindices][matched]))
+            data["caliop_pressure_hpa"].extend(list(ps[indices][subindices][matched]))
+            data["adv_time"].extend(n_matched*[advection_time])
+            data["goes_ABI_id"].extend(list(caliop_ids[matched]))
+
+            matched_rows, matched_cols = np.unravel_index(caliop_ids[matched], (5424, 5424))
+            data["goes_ABI_row"].extend(list(matched_rows))
+            data["goes_ABI_col"].extend(list(matched_cols))
+            data["goes_product"].extend(n_matched*[goes_product])
+            data["goes_time"].extend(n_matched*[goes_time])
+            
+            
+    df = pd.DataFrame(data)
+    # df.to_csv(save_path)
+    if verbose:
+        print(f"Finished fine L1 collocation for {os.path.basename(L1_path)}")
+    return df
+
+
+def prepare_fine_collocation(coarse_df, verbose=False):
+    
+    
+    if "result" in coarse_df.columns:
+        print(f"No coarse collocations found, skipping")
+        return
+
+    if verbose:
+        print(f"Started L1 collocation prep for {coarse_df.iloc[0].caliop_path}")
+
+    ca = CALIOP(coarse_df.iloc[0].caliop_path)
+    lons = ca.get("Longitude").data[:,0]
+    lats = ca.get("Latitude").data[:,0]
+    times = ca.get_time()[:,0]
+    
+    ascending = ca.is_ascending()
+
+    # Segment overpass
+    try:
+        segments = segment_caliop_product(lons, lats, times)
+    except ValueError:
+        return
+    
+    # To store results
+    data = defaultdict(list)
+    
+    for segment in segments:
+
+        # Check if there were any contrails nearby according to coarse collocation
+        if ascending:
+            sub_coarse = coarse_df[(coarse_df.lat >= segment[0])*(coarse_df.lat <= segment[1])]
+            idx = (lats >= segment[0])*(lats <= segment[1])
+        else:
+            sub_coarse = coarse_df[(coarse_df.lat >= segment[1])*(coarse_df.lat <= segment[0])]
+            idx = (lats >= segment[1])*(lats <= segment[0])
+            
+        # If there were no contrails nearby, skip to next segment
+        if len(sub_coarse) == 0:
+            continue
+            
+        # Extract coordinates
+        sub_lats = lats[idx]
+        sub_lons = lons[idx]
+        sub_times = times[idx]
+        
+        # Take halfway point
+        halfway_lat = sub_lats[len(sub_lats)//2]
+        halfway_lon = sub_lons[len(sub_lats)//2]
+        halfway_time = sub_times[len(sub_lats)//2]
+        
+        # Compute ABI grid location of halfway point
+        x, y = geodetic2ABI(halfway_lon, halfway_lat)
+        ABI_FD_row, ABI_FD_col = get_ABI_grid_locations(x, y)
+        
+        # Get closest product, and product time
+        closest_product, product_time = find_closest_product(halfway_time,
+                                             ABI_FD_row, ABI_FD_col)
+        
+        # Store result
+        data["product"].append(closest_product)
+        data["product_time"].append(product_time)
+        data["segment_start_lat"].append(segment[0])
+        data["segment_end_lat"].append(segment[1])
+        data["start_profile_id"].append(np.where(idx)[0][0])
+        data["end_profile_id"].append(np.where(idx)[0][-1])
+        
+        
+    df = pd.DataFrame(data)
+    
+    if verbose:
+        print(f"Finished L1 collocation prep for {df.iloc[0].caliop_path}")
+    return df
+

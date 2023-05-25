@@ -1,11 +1,12 @@
 import numpy as np
 import datetime as dt
+import os
 
 from pyhdf.SD import SD, SDC
 from pyhdf import HDF, VS
+import skimage.measure
 
-import os
-
+from geometry import *
 from vertical_feature_mask import interpret_vfm
 from visualization import *
 
@@ -142,6 +143,12 @@ class CALIOP:
         """
         return self.datasets
     
+    def get_ground_track(self, n_segments=5):
+        lons = self.get("Longitude")[:,0]
+        lats = self.get("Latitude")[:,0]
+        return GroundTrack(lons, lats, n_segments=n_segments)
+
+    
     def get(self, dataset, with_units=False):
         """
         Get dataset of .hdf file and fill values if applicable.
@@ -191,6 +198,77 @@ class CALIOP:
             ascending = False 
 
         return ascending
+    
+    def get_cloud_filter(self, backscatter_threshold=0.007,
+                             width_threshold=1000, thickness_threshold=240, area_threshold=10, return_backscatters=False, **kwargs):
+        """
+        Filters out noise in CALIOP L1 profiles based on thresholding the backscatter
+        values. 
+        
+        Parameters
+        ----------
+        backscatter_threshold: float (optional)
+            Used to threshold the sum of the 532 and 1064 nm backscatters,
+            default value from Iwabuchi et al. (2012)
+        width_threshold: float (optional)
+            The minimum width of a cloud in meters
+        thickness_threshold: float (optional)
+            The minimum thickness of a cloud in meters
+        area_threshold: float (optional)
+            Minimum area in 'pixels'
+        return_backscatters : bool (optional)
+            whether or not to return interpolated backscatter data
+
+        Returns
+        -------
+        mask: np.array
+            Cloud mask
+        """
+        extent = kwargs.get("extent", self.get_extent())
+
+        b532, lons, lats, times = subset_caliop_profile(self, "Total_Attenuated_Backscatter_532",
+                                                        extent, return_coords=True)
+        b1064 = subset_caliop_profile(self, "Attenuated_Backscatter_1064",
+                                                        extent, return_coords=False)
+
+        b532_itp = interpolate_caliop_profile(b532, ve1=kwargs.get("min_alt", 0.0)*1000,
+                                                    ve2=kwargs.get("max_alt", 40.)*1000)
+        
+        b1064_itp = interpolate_caliop_profile(b1064, ve1=kwargs.get("min_alt", 0.0)*1000,
+                                                    ve2=kwargs.get("max_alt", 40.)*1000)
+        
+
+        mask = b532_itp.T + b1064_itp.T >= backscatter_threshold
+        ccl = skimage.measure.label(mask, connectivity=1)
+        
+        to_remove = []
+        for c in skimage.measure.regionprops(ccl):
+            
+            box = c.bbox
+
+            # Horizontal resolution is 333 m
+            width = (box[3] - box[1])*333
+
+            # Vertical resolution is 30 m
+            thickness = (box[2]-box[0])*30
+
+            
+            if thickness < thickness_threshold or width < width_threshold or c.area < area_threshold:
+                to_remove.append(c.label)
+
+            else:
+                max_backscatter_532 = b532_itp.T[box[0]:box[2], box[1]:box[3]].max()
+                if max_backscatter_532 < 0.0065:
+                    to_remove.append(c.label)
+
+            
+        negative_mask = np.isin(ccl, to_remove)
+        updated_mask = mask*(~negative_mask)
+        
+        if not return_backscatters:
+            return updated_mask 
+        else:
+            return updated_mask, b532_itp, b1064_itp, lons, lats, times
     
     def filter_rows(self, lat_min, lat_max, cirrus=True):
         """
@@ -255,15 +333,33 @@ class CALIOP:
         return extent
     
 
-    def plot(self, dataset, fig=None, ax=None, **kwargs):
+    def plot_backscatter(self, wavelength=532,
+                        cloud_filter=False, fig=None, ax=None, extent=None, **kwargs):
+        if wavelength not in [532, 1064]:
+            raise ValueError("Choose one of 532, 1064 for wavelength")
 
-        extent = self.get_extent()
+        if extent is None:
+            extent = self.get_extent()
 
-        data, lons, lats, times = subset_caliop_profile(self, dataset,
-                                                        extent, return_coords=True)
+        if cloud_filter:
+            cloud_mask, b532, b1064, lons, lats, times = self.get_cloud_filter(extent=extent,
+                                                                            return_backscatters=True, **kwargs)
 
-        data_itp = interpolate_caliop_profile(data, ve1=kwargs.get("min_alt", 0.0)*1000,
-                                                    ve2=kwargs.get("max_alt", 40.)*1000)
+            if wavelength == 532:
+                data_itp = b532 * cloud_mask.T
+            else:
+                data_itp = b1064 * cloud_mask.T
+        else:
+            if wavelength == 532:
+                dataset = "Total_Attenuated_Backscatter_532"
+            else:
+                dataset = "Attenuated_Backscatter_1064"
+
+            data, lons, lats, times = subset_caliop_profile(self, dataset,
+                                                            extent, return_coords=True)
+
+            data_itp = interpolate_caliop_profile(data, ve1=kwargs.get("min_alt", 0.0)*1000,
+                                                        ve2=kwargs.get("max_alt", 40.)*1000)
 
         if fig is None and ax is None:
             fig, ax = plt.subplots(dpi=300, figsize=(15, 10))

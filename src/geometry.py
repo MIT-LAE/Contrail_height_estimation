@@ -557,30 +557,6 @@ def geodesic_distance(lon1, lat1, lon2, lat2, globe_params=GRS80_PARAMS,
     
     return s 
 
-
-def get_ABI_grid_locations(x, y, dx=5.5998564e-05, dy=5.5998564e-05):
-    """
-    Finds row and column of given ABI fixed-grid coordinates
-
-    Parameters
-    ----------
-    x : Union[float, np.array]
-        ABI fixed-grid x coordinate, in radians
-    y : Union[float, np.array]
-        ABI fixed-grid y coordinate, in radians
-    
-    Returns
-    -------
-    rows : Union[int, np.array]
-        ABI fixed-grid rows
-    cols : Union[int, np.arary]
-        ABI fixed-grid columns
-    """
-    cols = np.floor(x/dx).astype(np.int64) + 2712
-    rows = -np.floor(y/dy).astype(np.int64) + 2711
-    return rows, cols
-
-
 def great_circle_intermediate_point(lon1, lat1, lon2, lat2, fraction):
     """
     Compute an intermediate point along the great circle path between
