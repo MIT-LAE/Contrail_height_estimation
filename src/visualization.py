@@ -11,7 +11,9 @@ import math
 
 
 class TimeLocator(mpl.ticker.Locator):
-    
+    """
+    Source: https://github.com/peterkuma/ccplot/blob/master/bin/ccplot
+    """
     def __init__(self, n: int, time: List[dt.datetime], steps: List[int]=[1, 2, 5, 10, 15, 30, 300, 600, 900],
                  minorsteps: List[float]=[0.2, 0.5, 1, 2, 3, 5, 10, 60, 120, 300]):
         
@@ -53,6 +55,9 @@ class TimeLocator(mpl.ticker.Locator):
         
         
 class TimeMinorLocator(mpl.ticker.Locator):
+    """
+    Source: https://github.com/peterkuma/ccplot/blob/master/bin/ccplot
+    """
     def __call__(self):
         locator = self.axis.get_major_locator()
         if isinstance(locator, TimeLocator):
@@ -62,6 +67,9 @@ class TimeMinorLocator(mpl.ticker.Locator):
 
 
 class TimeFormatter(mpl.ticker.Formatter):
+    """
+    Source: https://github.com/peterkuma/ccplot/blob/master/bin/ccplot
+    """
     def __init__(self, time):
         self.time = time
 
@@ -71,10 +79,12 @@ class TimeFormatter(mpl.ticker.Formatter):
         return self.time[i].strftime("%H:%M:%S")
 
 
-    
-
 
 def new_axes(fig, x, y, width, height, padding=1.0):
+    """
+    Source: https://github.com/peterkuma/ccplot/blob/master/bin/ccplot
+    """
+
     figw_old, figh_old = fig.get_size_inches()
 
     figw = max(figw_old, x + width + padding)
@@ -84,6 +94,9 @@ def new_axes(fig, x, y, width, height, padding=1.0):
     return fig.add_axes([x/figw, 1-(y+height)/figh, width/figw, height/figh])
 
 def resize_figure(fig, figw, figh):
+    """
+    Source: https://github.com/peterkuma/ccplot/blob/master/bin/ccplot
+    """
     figw_old, figh_old = fig.get_size_inches()
 
     fig.set_size_inches(figw, figh)
@@ -98,13 +111,20 @@ def resize_figure(fig, figw, figh):
 
     
 def get_axes_bounds(fig, axes):
+    """
+    Source: https://github.com/peterkuma/ccplot/blob/master/bin/ccplot
+    """
     figw, figh = fig.get_size_inches()
     xrel, yrel, wrel, hrel = axes.get_position(True).bounds
     return figw*xrel, figh*(1-yrel-hrel), figw*wrel, figh*hrel
     
 
 def fit_colorbar(fig, axes, aspect=0.03, space=0.4, padding=0.0):
-    """Creates new axes for a colorbar at the expense of main axes.
+    """
+   
+    Source: https://github.com/peterkuma/ccplot/blob/master/bin/ccplot
+
+    Creates new axes for a colorbar at the expense of main axes.
     Arguments:
         fig     -- an instance of mpl.Figure
         axes    -- an instance of mpl.Axes
@@ -117,7 +137,11 @@ def fit_colorbar(fig, axes, aspect=0.03, space=0.4, padding=0.0):
                     padding=padding)
         
 def loadcolormap(filename, name):
-    """"Returns a tuple of matplotlib colormap, matplotlib norm,
+    """"
+
+    Source: https://github.com/peterkuma/ccplot/blob/master/bin/ccplot
+
+    Returns a tuple of matplotlib colormap, matplotlib norm,
     and a list of ticks loaded from the file filename in format:
     BOUNDS
     from1 to1 step1
@@ -218,15 +242,24 @@ def loadcolormap(filename, name):
 
 
 def lon2str(lonf, degree=""):
+    """
+    Source: https://github.com/peterkuma/ccplot/blob/master/bin/ccplot
+    """
     if lonf >= 0.0: return "%.2f%sE" % (lonf, degree)
     else: return "%.2f%sW" % (-lonf, degree)
 
 
 def lat2str(latf, degree=""):
+    """
+    Source: https://github.com/peterkuma/ccplot/blob/master/bin/ccplot
+    """
     if latf >= 0.0: return "%.2f%sN" % (latf, degree)
     else: return "%.2f%sS" % (-latf, degree)
 
 def setup_lonlat_axes(fig, axes, lon, lat, axis="x"):
+    """
+    Source: https://github.com/peterkuma/ccplot/blob/master/bin/ccplot
+    """
     @mpl.ticker.FuncFormatter
     def lonlat_formatter(x, pos=None):
         i = int(x)
@@ -273,6 +306,9 @@ def setup_lonlat_axes(fig, axes, lon, lat, axis="x"):
 
     
 class CopyLocator(mpl.ticker.Locator):
+    """
+    Source: https://github.com/peterkuma/ccplot/blob/master/bin/ccplot
+    """
     def __init__(self, axis):
         self.model_axis = axis
 
@@ -281,6 +317,9 @@ class CopyLocator(mpl.ticker.Locator):
 
     
 class SciFormatter(mpl.ticker.Formatter):
+    """
+    Source: https://github.com/peterkuma/ccplot/blob/master/bin/ccplot
+    """
     def __call__(self, x, pos=None):
         if x == 0.0: return "0.0"
         y = math.log(abs(x), 10)
@@ -465,6 +504,9 @@ def plot_caliop_profile_direct(fig, ax, lons, lats, times, data, min_alt=0.0, ma
     
 
 def setup_dist_axes(fig, axes, times, axis="x"):
+    """
+    Source: https://github.com/peterkuma/ccplot/blob/master/bin/ccplot
+    """
     
     dists = 7*np.cumsum((times[1:].astype(np.datetime64)\
                      -times[:-1].astype(np.datetime64))/np.timedelta64(1,'s'))
