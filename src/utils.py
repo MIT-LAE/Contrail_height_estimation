@@ -19,14 +19,21 @@ def get_numpy_asset(name):
 
 def get_lons():
     """
-    Returns longitudes corresponding to orthographic projection for
+    Returns longitudes corresponding to the orthographic projection for
     Meijer et al. (2022) contrail detections.
     """
     return get_numpy_asset("longitudes")
 
 def get_lats():
     """
-    Returns latitudes corresponding to orthographic projection for
+    Returns latitudes corresponding to the orthographic projection for
     Meijer et al. (2022) contrail detections.
     """
     return get_numpy_asset("latitudes")
+
+def get_ortho_ids():
+    """
+    Returns the ABI fixed-grid pixel IDs to the orthographic projection for
+    Meijer et al. (2022) contrail detections.
+    """
+    return get_numpy_asset("ABI2orthographic")
