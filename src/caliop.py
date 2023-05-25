@@ -1,18 +1,11 @@
-import os, sys 
 import numpy as np
 import datetime as dt
-from typing import Type, List
-import matplotlib.pyplot as plt 
 
-import xarray as xr
 from pyhdf.SD import SD, SDC
 from pyhdf import HDF, VS
 
-import pandas as pd 
-from sklearn.neighbors import BallTree
-from skimage.measure import label, regionprops
 
-from cohesion.vertical_feature_mask import interpret_vfm
+from vertical_feature_mask import interpret_vfm
 from contrails.numerics.algorithms import *
 
 PROJECTION_PATH = '/net/d13/data/vmeijer/reprojections/'
@@ -33,7 +26,13 @@ class CALIOP:
     """
     Class to handle CALIOP file I/O
     """
-    def __init__(self, path: str):
+    def __init__(self, path):
+        """
+        Parameters
+        ----------
+        path : str
+            Path to CALIOP L1/L2 HDF file.
+        """
         
         self.path = path
         self.file = SD(self.path, SDC.READ)
@@ -42,6 +41,9 @@ class CALIOP:
         self.read_meta_data()
         
     def read_meta_data(self):
+        """
+        Reads HDF metadata.
+        """
 
         h4 =  HDF.HDF(self.path)
         vs = h4.vstart()
@@ -52,9 +54,19 @@ class CALIOP:
             setattr(self, name, vs_meta[0][i])
         h4.close()
 
-    def get_time_bounds(self, UTC: bool=True) -> list:
+    def get_time_bounds(self, UTC=True):
         """
-        Obtain initial and final time of CALIOP data
+        Obtain initial and final time of CALIOP curtain.
+
+        Parameters
+        ---------
+        UTC : bool (optional)
+            To convert time bounds to UTC or not
+
+        Returns
+        -------
+        time_bounds : List[dt.datetime]
+            Initial and final time of CALIOP curtain
         """
         
         if UTC:
@@ -67,10 +79,20 @@ class CALIOP:
         
         return time_bounds      
         
-    def _convert_time(self, t: int) -> dt.datetime:
+    def _convert_time(self, t):
         """
         Converts CALIPSO time format to python datetime object
         Based on function found at: https://github.com/peterkuma/ccplot/blob/master/bin/ccplot
+
+        Parameters
+        ----------
+        t : int
+            CALIPSO time format integer
+        
+        Returns
+        -------
+        time : dt.datetime
+            Datetime object corresponding to CALIPSO time
         """
             
         d = int(t % 100)
@@ -79,9 +101,19 @@ class CALIOP:
 
         return dt.datetime(2000 + y//10000, m//100, d) + dt.timedelta(t % 1)
     
-    def get_time(self, UTC: bool=True) -> np.array:
+    def get_time(self, UTC=True):
         """
-        Get time dataset of .hdf file and convert to datetime
+        Get time dataset of .hdf file and convert to datetime objects.
+
+        Parameters
+        ---------
+        UTC : bool (optional)
+            To convert time bounds to UTC or not
+
+        Returns
+        -------
+        time : np.array
+            Array of datetime values
         """ 
 
         if UTC:
@@ -95,11 +127,28 @@ class CALIOP:
         return np.array(result).reshape(raw_time.shape)
     
     def available_dataset_names(self):
+        """
+        Lists available HDF datasets
+        """
         return self.datasets
     
-    def get(self, dataset: str, with_units: bool=False) -> np.array:
+    def get(self, dataset, with_units=False):
         """
-        Get dataset of .hdf file and fill values if applicable
+        Get dataset of .hdf file and fill values if applicable.
+
+        Parameters
+        ----------
+        dataset : str
+            The dataset name
+        with_units : bool (optional)
+            Returns the dataset units as well
+
+        Returns
+        -------
+        data : np.array
+            Dataset data
+        units : str (optional)
+            Dataset units
         """ 
         
         if dataset not in self.datasets:
@@ -120,6 +169,10 @@ class CALIOP:
             return np.ma.masked_equal(self.file.select(dataset)[:], fill_value), self.file.select(dataset)["units"]
 
     def is_ascending(self):
+        """
+        Checks whether this is an ascending orbit (i.e. daytime overpass)
+        or a descending orbit (i.e. nighttime overpass).
+        """
         lats = self.get("Latitude")
         
         if lats[1,0] - lats[0,0] > 0:
@@ -130,6 +183,19 @@ class CALIOP:
         return ascending
     
     def filter_rows(self, lat_min, lat_max, cirrus=True):
+        """
+        Returns mask that can be used for indexing any dataset in order to
+        subset it to the given latitude range.
+
+        Parameters
+        ----------
+        lat_min : float
+            Minimum latitude, degrees
+        lat_max : float
+            Maximum latitude, degrees
+        cirrus : bool (optional)
+            Whether or not to filter for cirrus data only (L2 feature)
+        """
 
         lats = self.get("Latitude")
         fcfs = self.get("Feature_Classification_Flags")
@@ -150,7 +216,7 @@ class CALIOP:
             fcf = fcfs[r, 0]
             extinctionqc = extinction_qcs[r,0]
 
-            if not filter_feature(fcf) or extinctionqc >= 16:
+            if not filter_cirrus_feature(fcf) or extinctionqc >= 16:
                 continue 
 
             rows_to_keep.append(r)
@@ -161,9 +227,20 @@ class CALIOP:
         return rows_to_keep
 
 
-def filter_feature(fcf: int) -> bool:
+def filter_cirrus_feature(fcf):
     """
-    Given a feature classification flag from the CALIOP L2 layer product, determines whether the feature is cirrus cloud
+    Given a feature classification flag from the CALIOP L2 layer product,
+    determines whether the feature is cirrus cloud.
+
+    Parameters
+    ----------
+    fcf : int
+        Feature classification flag
+
+    Returns
+    -------
+    is_cirrus : bool
+        Whether the feature is cirrus
     """
     
     interpreted = interpret_vfm(fcf)
@@ -173,19 +250,6 @@ def filter_feature(fcf: int) -> bool:
                   interpreted[3] == "high"]
 
     return all(conditions)
-
-
-def collocate(lon_caliop: np.array, lat_caliop: np.array, lons_goes: np.array, lats_goes: np.array) -> tuple:
-    R = 6378e3
-    distance = (R*np.cos(np.radians(lat_caliop))*(np.radians(lon_caliop)-np.radians(lons_goes)))**2 + \
-                     (R*(np.radians(lat_caliop) - np.radians(lats_goes)))**2
-    idx = np.argmin(distance) 
-    
-    if distance[idx] < 2000:
-        
-        return lons_goes[idx], lats_goes[idx], idx
-    else:
-        return np.nan, np.nan, 0    
 
     
 def interpolate_caliop_profile(data, lidar_alts=CALIOP_ALTITUDES, ve2=40.0e3, ve1=0.0, vres=30.0):
