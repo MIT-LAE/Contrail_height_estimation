@@ -181,7 +181,7 @@ def get_bearing(lon0, lat0, lon1, lat1):
     return np.degrees(np.arctan2(a1, a2))
 
 
-def get_haversine(lon0, lat0, lon1, lat1) -> np.array:
+def get_haversine(lon0, lat0, lon1, lat1):
     """
     Computes length of greatcircle path extending from (lon0, lat0) to (lon1, lat1).
     
@@ -201,7 +201,7 @@ def get_haversine(lon0, lat0, lon1, lat1) -> np.array:
     haversine: float
         Haversine distance in km
     """ 
-    return RADIUS_EARTH*get_angular_distance(lon0, lat0, lon1, lat1)
+    return RADIUS_EARTH * get_angular_distance(lon0, lat0, lon1, lat1)
    
         
 def get_angular_distance(lon0, lat0, lon1, lat1):
@@ -211,18 +211,18 @@ def get_angular_distance(lon0, lat0, lon1, lat1):
     
     Parameters
     ----------
-    lon0: float
+    lon0 : float
         Longitude of first point, degrees
-    lat0: float
+    lat0 : float
         Latitude of first point, degrees
-    lon1: float
+    lon1 : float
         Longitude of second point, degrees
-    lat1: float
+    lat1 : float
         Latitude of second point, degrees
     
     Returns
     -------
-    angular distance: float
+    angular distance : float
         Central angle in radians 
     """ 
     a = np.sin(0.5*np.radians(lat1-lat0))**2 \
@@ -241,22 +241,22 @@ def parallax_correction_vicente_forward(lon, lat, h,
 
     Parameters
     ----------
-    lon: float
+    lon : float
         Longitude, degrees
-    lat: float
+    lat : float
         Latitude, degrees
-    h: float
+    h : float
         Cloud height, meters
-    globe_params: dict (optional)
+    globe_params : dict (optional)
         The ellipsoid used for geodetic coordinates
-    sat_params: dict (optional)
+    sat_params : dict (optional)
         The satellite used for the correction.
 
     Returns
     -------
-    lon_correct: float
+    lon_correct : float
         Corrected longitude, degrees
-    lat_correct: float
+    lat_correct : float
         Corrected latitude, degrees
     """
     # Unpack parameters
@@ -452,7 +452,8 @@ def geodesic_distance(lon1, lat1, lon2, lat2, globe_params=GRS80_PARAMS,
     s = b*A*(sigma-dsigma)
     
     return s 
-                   
+
+
 def get_ABI_grid_locations(x, y, dx=5.5998564e-05, dy=5.5998564e-05):
     cols = np.floor(x/dx).astype(np.int64) + 2712
     rows = -np.floor(y/dy).astype(np.int64) + 2711
@@ -496,70 +497,3 @@ def great_circle_intermediate_point(lon1, lat1, lon2, lat2, fraction):
     lon_i = np.degrees(np.arctan2(y, x))
     
     return lon_i, lat_i
-
-
-# def get_look_angles(lon: float, lat: float, alt: float,
-#             GOES16_h: float=35786.0234375, GOES16_lon0: float=-75.2) -> tuple:
-#     """
-#     Computes the look angles for a geostationary satellite.
-#     Reference: https://geodesy.noaa.gov/CORS/Articles/SolerEisemannJSE.pdf
-
-#     Parameters
-#     ----------
-#     lon: float
-#         Longitude in degrees
-#     lat: float
-#         Latitude in degrees
-#     alt: float
-#         Altitude of object/cloud in km
-#     nc: xr.Dataset
-#         GOES ABI dataset
-
-#     Returns
-#     -------
-#     viewing_angle: float
-#         The viewing angle (complement of the zenith angle) in degrees
-#     azimuth_angle: float
-#         The azimuth angle (defined w.r.t. North) in degrees
-#     """
-#     assert np.all(lat) > 0
-
-#     # Earth radius in km
-#     R_e = 6371.
-#     lon_difference = abs(lon - GOES16_lon0)
-#     lat_difference = abs(lat)
-
-
-#     # Eq. 1 in reference
-#     cos_gamma = np.cos(np.radians(lon_difference)) * np.cos(np.radians(lat_difference))
-#     gamma = np.arccos(cos_gamma)
-
-#     # Eq. 2 in reference
-#     r = R_e + GOES16_h
-#     R = R_e + alt
-
-#     s = r*np.sqrt(1 + (R/r)**2 -2*(R/r)*np.cos(gamma))
-
-#     # Eq. 3 & 4 in reference
-#     sinndr = (R / s) * np.sin(gamma)
-#     sinzen = ((R + GOES16_h) / R) * sinndr
-
-#     viewing_angle = np.degrees(np.arcsin(sinzen))
-
-#     # Eq. 6 in reference
-#     beta = np.arccos(np.tan(np.radians(lat_difference))/np.tan(gamma))
-
-#     # See Fig. 2 in reference
-#     # (we assume all points are north of sub-sat point, see assert)
-
-#     # Point east of satellite subpoint
-#     idx = lon > GOES16_lon0
-#     azimuth_angle =  180 - np.degrees(beta)
-#     azimuth_angle[idx] = 180 + np.degrees(beta[idx])
-
-#     return viewing_angle, azimuth_angle
-
-
-def get_scan_angle(zenith_angle,  GOES16_h: float=35786.0234375, R_e=6371.):
-    
-    return np.degrees(np.arcsin( (R_e/(R_e+GOES16_h))*np.sin(np.radians(zenith_angle))))
