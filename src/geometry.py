@@ -10,43 +10,82 @@ RADIUS_EARTH = 6378. # km
 
 
 class GroundTrack:
+    """
+    Represents a satellite ground track using great circle paths.
+
+    Parameters
+    ----------
+    lons : np.array
+        Longitudes, degrees
+    lats : np.arary
+        Latitudes, degrees
+    n_segments : int (optional)
+        The number of great circle paths to use to represent
+        the ground track
+    """
 
     def __init__(self, lons, lats, n_segments=5):
+
         self.lons = lons
         self.lats = lats
         if lats[0] > lats[-1]:
             self.ascending = False
         else:
             self.ascending = True
+
         self.n_segments = n_segments
         self.setup_segments()
     
     def setup_segments(self):
-
-        lat_per_segment = (self.lats[-1]-self.lats[0])/self.n_segments
+        """
+        Break up the ground track in great circle paths
+        """
+        
+        lat_per_segment = (self.lats[-1] - self.lats[0]) / self.n_segments
 
         # First segment
         approx_lat = lat_per_segment + self.lats[0]
+        
         # Find index
-        idx = np.argmin(np.abs(self.lats-approx_lat))
+        idx = np.argmin(np.abs(self.lats - approx_lat))
+
         self.segments = [GreatCirclePath(self.lons[0], self.lats[0], self.lons[idx],
                             self.lats[idx])]
 
-        for n in range(1, self.n_segments-1):
+        for _ in range(1, self.n_segments-1):
+
+            # Start position of new segment
             lon0 = self.lons[idx]
             lat0 = self.lats[idx]
 
             # Find new idx
             approx_lat = lat0 + lat_per_segment
-            # Find index
+            
+            # Find index of end position of segment
             idx = np.argmin(np.abs(self.lats-approx_lat))
             self.segments.append(GreatCirclePath(lon0, lat0, self.lons[idx], self.lats[idx]))
         
         # Final segment
-        self.segments.append(GreatCirclePath(self.lons[idx], self.lats[idx], self.lons[-1], self.lats[-1]))
+        self.segments.append(GreatCirclePath(self.lons[idx], self.lats[idx],
+                                             self.lons[-1], self.lats[-1]))
 
     
     def get_coordinates(self, n_points=100):
+        """
+        Return coordinates of ground track. 
+
+        Parameters
+        ----------
+        n_points : int (optional)
+            Number of coordinate pairs to return
+
+        Returns
+        -------
+        lons : np.array
+            Longitudes, degrees
+        lats : np.array
+            Latitudes, degrees
+        """
 
         # Divide n_points over segments
         points_per_segment = int(n_points/self.n_segments)
@@ -60,6 +99,21 @@ class GroundTrack:
         return stacked[0,:], stacked[1,:]
 
     def get_crosstrack_distance(self, lon, lat):
+        """
+        Computes the crosstrack distance to the given coordinates.
+
+        Parameters
+        ----------
+        lon : Union[float, np.array]
+            Longitude, degrees
+        lat : Union[float, np.arrray]
+            Latitude, degrees
+
+        Returns
+        -------
+        dists : Union[float, np.array]
+            Crosstrack distance in km
+        """
 
         if isinstance(lon, float):
 
@@ -86,6 +140,7 @@ class GroundTrack:
             
             return dists
 
+
 class GreatCirclePath:
     """
     Represents a great circle path between two points. 
@@ -100,7 +155,6 @@ class GreatCirclePath:
         Longitude of second point, degrees
     lat1: float
         Latitude of second point, degrees
-
     """
     
     def __init__(self, lon0, lat0, lon1, lat1):
@@ -113,7 +167,18 @@ class GreatCirclePath:
     def get_crosstrack_distance(self, lon, lat):
         """
         Compute distance from points specified by (lon, lat) to great circle.
-        Inputs in degrees. 
+
+        Parameters
+        -----------
+        lon : Union[float, np.array]
+            Longitude, degrees
+        lat : Union[float, np.array]
+            Latitude, degrees
+
+        Returns
+        -------
+        dist : Union[float, np.array]
+            Distance in km 
         """ 
         
         bearing_start_end = np.radians(get_bearing(self.lon0, self.lat0, self.lon1, self.lat1))
@@ -126,8 +191,20 @@ class GreatCirclePath:
     
     def get_coordinates(self, n_points=100):
         """
-        Sample 'n_points' along great circle path.
-        """ 
+        Sample coordinates along great circle path
+
+        Parameters
+        ----------
+        n_points : int (optional)
+            Number of coordinate pairs to return
+
+        Returns
+        -------
+        lons : np.array
+            Longitudes, degrees
+        lats : np.array
+            Latitudes, degrees
+        """
         t = np.linspace(0, 1, n_points)
         return great_circle_intermediate_point(self.lon0, self.lat0, self.lon1, self.lat1, t)
         
@@ -322,6 +399,33 @@ def parallax_correction_vicente_forward(lon, lat, h,
 
 def parallax_correction_vicente_backward(lon, lat, h, globe_params=GRS80_PARAMS,
                                                      sat_params=GOES16_PARAMS):
+    """
+    Implements the inverse of the parallax correction method by Vicente et al. (2002) as
+    described in Bielinski (2020). 
+
+    That is, given a geodetic position and height, where would a given satellite 
+    'view' the object?
+
+    Parameters
+    ----------
+    lon : float
+        Longitude, degrees
+    lat : float
+        Latitude, degrees
+    h : float
+        Cloud height, meters
+    globe_params : dict (optional)
+        The ellipsoid used for geodetic coordinates
+    sat_params : dict (optional)
+        The satellite used for the correction.
+
+    Returns
+    -------
+    lon_correct : float
+        Corrected longitude, degrees
+    lat_correct : float
+        Corrected latitude, degrees
+    """
     
     # Unpack parameters
     R_eq = globe_params["a"]
@@ -455,6 +559,23 @@ def geodesic_distance(lon1, lat1, lon2, lat2, globe_params=GRS80_PARAMS,
 
 
 def get_ABI_grid_locations(x, y, dx=5.5998564e-05, dy=5.5998564e-05):
+    """
+    Finds row and column of given ABI fixed-grid coordinates
+
+    Parameters
+    ----------
+    x : Union[float, np.array]
+        ABI fixed-grid x coordinate, in radians
+    y : Union[float, np.array]
+        ABI fixed-grid y coordinate, in radians
+    
+    Returns
+    -------
+    rows : Union[int, np.array]
+        ABI fixed-grid rows
+    cols : Union[int, np.arary]
+        ABI fixed-grid columns
+    """
     cols = np.floor(x/dx).astype(np.int64) + 2712
     rows = -np.floor(y/dy).astype(np.int64) + 2711
     return rows, cols
