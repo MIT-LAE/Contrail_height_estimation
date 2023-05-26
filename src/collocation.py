@@ -217,7 +217,30 @@ def get_pixel_time_parameters(nc):
             scene_id += "1"
     return scan_mode, scene_id
 
-def find_closest_product(caliop_time, ABI_FD_row, ABI_FD_col):
+def find_closest_ABI_product(caliop_time, ABI_FD_row, ABI_FD_col):
+    """
+    Finds the GOES-16 ABI product for which the pixel capture time at
+    the location indicated by 'ABI_FD_row' and 'ABI_FD_col' is closest
+    to 'caliop_time'.
+
+    Uses the pixel capture time estimates from Carr et al. (2020).
+
+    Parameters
+    ----------
+    caliop_time : dt.datetime
+        The CALIOP profile time in UTC
+    ABI_FD_row : int
+        The ABI Full disk row
+    ABI_FD_col : int
+        The ABI Full disk col
+
+    Returns
+    -------
+    closest_product : str
+        The found ABI product name
+    start_time : dt.datetime
+        The scan start time of the found ABI product
+    """
     
     ABI_CONUS_row = ABI_FD_row - CONUS_FIRST_ROW
     ABI_CONUS_col = ABI_FD_col - CONUS_FIRST_COL
@@ -566,7 +589,7 @@ def fine_collocation(coarse_df, get_mask, get_ERA5_data, verbose=False):
         extent[0] = lons.min()
         extent[1] = lons.max()
 
-        
+
         weather = get_ERA5_data(goes_time)
 
         heights = np.linspace(8e3, 15e3, cloud_mask.shape[0])[::-1][np.argmax(cloud_mask, axis=0)]
@@ -621,7 +644,7 @@ def fine_collocation(coarse_df, get_mask, get_ERA5_data, verbose=False):
         ABIgrid_rows, ABIgrid_cols = get_ABI_grid_locations(x,y)
         
         # Check contrail matches
-        mask = get_mask(goes_time, conus=True)
+        mask = get_mask(goes_time, conus=conus)
 
         orthographic_ABI_ids = get_ortho_ids()
         contrail_ids = orthographic_ABI_ids[mask==1.0]
