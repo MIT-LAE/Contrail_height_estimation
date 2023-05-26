@@ -358,6 +358,9 @@ def label_scan_rows(lons, lats, boundaries=np.array([0, 229, 483, 737, 991, 1245
 
 
 def segment_caliop_product(lons, lats, times):
+    """
+    
+    """
     
     # Closest CONUS product time to each profile in the L1 product
     conus_times = [round_conus_time(t) for t in times]
@@ -766,7 +769,7 @@ def prepare_fine_collocation(coarse_df, verbose=False):
         ABI_FD_row, ABI_FD_col = get_ABI_grid_locations(x, y)
         
         # Get closest product, and product time
-        closest_product, product_time = find_closest_product(halfway_time,
+        closest_product, product_time = find_closest_ABI_product(halfway_time,
                                              ABI_FD_row, ABI_FD_col)
         
         # Store result
