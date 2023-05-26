@@ -23,8 +23,6 @@ from collocation  import *
 from abi import *
 from utils import *
 
-# Time when Full Disk GOES-16 product refresh rate changed from 15 to 10 minutes
-TRANSITION_TIME = dt.datetime(2019, 4, 2)
 SAVE_DIR = "/home/vmeijer/contrail-height-estimation/data/coarse/"
 
 def get_mask(time, conus=False):
