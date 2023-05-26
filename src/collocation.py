@@ -643,7 +643,8 @@ def fine_collocation(coarse_df, get_mask, get_ERA5_data, verbose=False):
             scan_mode = 6
 
         scan_start_time = get_scan_start_time(goes_time, scan_mode, goes_product)
-        pixel_times = get_pixel_times(scan_mode, 11, region=goes_product) + np.datetime64(scan_start_time)
+        pixel_times = get_pixel_times(scan_mode, 11, region=goes_product) \
+                        + np.datetime64(scan_start_time)
 
 
         if "CONUS" in goes_product:
