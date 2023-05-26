@@ -364,7 +364,11 @@ class CALIOP:
         if fig is None and ax is None:
             fig, ax = plt.subplots(dpi=300, figsize=(15, 10))
 
-        plot_caliop_profile_direct(fig, ax, lons, lats, times, data_itp.T, **kwargs)
+        reverse = kwargs.get("reverse", False)
+        if reverse:
+            plot_caliop_profile_direct(fig, ax, lons[::-1], lats[::-1], times[::-1], data_itp.T[:,::-1], **kwargs)
+        else:
+            plot_caliop_profile_direct(fig, ax, lons, lats, times, data_itp.T, **kwargs)
         plt.close()
         return fig
 
