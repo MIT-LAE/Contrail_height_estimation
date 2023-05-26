@@ -359,7 +359,22 @@ def label_scan_rows(lons, lats, boundaries=np.array([0, 229, 483, 737, 991, 1245
 
 def segment_caliop_product(lons, lats, times):
     """
+    Divide a CALIOP curtain into segments where each segment
+    has a different closest (temporally) GOES-16 ABI product and time.
     
+    Parameters
+    ----------
+    lons : np.array
+        Longitude of CALIPSO ground track, degrees
+    lats : np.array
+        Latitude of CALIPSO ground track, degrees
+    times : np.array
+        Times of CALIPSO ground track, UTC
+    
+    Returns
+    -------
+    segment_boundaries : List[Tuple[float]]
+        List of the start and end latitudes of each segment
     """
     
     # Closest CONUS product time to each profile in the L1 product
