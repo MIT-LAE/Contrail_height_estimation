@@ -330,13 +330,18 @@ class SciFormatter(mpl.ticker.Formatter):
 
 def plot_caliop_profile_direct(fig, ax, lons, lats, times, data, min_alt=0.0, max_alt=40.0,
                                  colorbar=False, dist_axis=False, rotate=False,
-                                 add_scalebar=False):
+                                 add_scalebar=False, **kwargs):
    
 
-    cmap, norm, ticks = loadcolormap(os.path.dirname(os.path.realpath(__file__))
-                                    + "/assets/calipso-backscatter.cmap", "idk")
-    
-     
+    if kwargs.get("cmap", None) is None: 
+
+        cmap, norm, ticks = loadcolormap(os.path.dirname(os.path.realpath(__file__))
+                                        + "/assets/calipso-backscatter.cmap", "idk")
+    else:
+        cmap = kwargs.get("cmap")
+        norm = kwargs.get("norm")
+        ticks = kwargs.get("ticks", None)
+
     ve1 = min_alt
     ve2 = max_alt
     if rotate:

@@ -108,7 +108,6 @@ def execute_fine_L1_collocation(L1_path):
         heights = np.linspace(8e3, 15e3, cloud_mask.shape[0])[::-1][np.argmax(cloud_mask, axis=0)]
         heights[heights == 15.0e3] = np.nan
         ps = map_heights_to_pressure(lons, lats, times, heights, weather)
-        #us, vs = get_interpolated_winds(lons, lats, times, heights, ps, weather)
 
         if goes_time < TRANSITION_TIME:
             scan_mode = 3
@@ -125,9 +124,9 @@ def execute_fine_L1_collocation(L1_path):
             conus = False
 
         ABI_extent = map_geodetic_extent_to_ABI(extent, conus=conus)
-        # domain_idx = (goes_lons >= extent[0])*(goes_lons <= extent[1])\
-        #         *(goes_lats >= extent[2])*(goes_lats <= extent[3])
-        sub_times = np.sort(pixel_times[ABI_extent[2]:ABI_extent[3],ABI_extent[0]:ABI_extent[1]].flatten())
+
+        sub_times = np.sort(pixel_times[ABI_extent[2]:ABI_extent[3],
+                                        ABI_extent[0]:ABI_extent[1]].flatten())
 
         median_idx = len(sub_times)//2
         advection_time = pd.Timestamp(sub_times[median_idx]).to_pydatetime()
@@ -157,7 +156,6 @@ def execute_fine_L1_collocation(L1_path):
         
         # Check contrail matches
         mask = get_mask(goes_time, conus=True)
-        #edt = distance_transform_edt(mask)
 
         orthographic_ABI_ids = get_ortho_ids()
         contrail_ids = orthographic_ABI_ids[mask==1.0]
@@ -191,14 +189,7 @@ def execute_fine_L1_collocation(L1_path):
             data["goes_ABI_col"].extend(list(matched_cols))
             data["goes_product"].extend(n_matched*[goes_product])
             data["goes_time"].extend(n_matched*[goes_time])
-            
-            # # Get relevant edt values
-            # edts = []
-            # for ID in caliop_ids[matched]:
-            #     rows, cols = np.where(orthographic_ABI_ids == ID)
-            #     edts.append(np.mean(edt[rows, cols]))
-            # data["contrail_edt"] = edts
-            
+
     df = pd.DataFrame(data)
     df.to_csv(save_path)
     print(f"Finished fine L1 collocation for {os.path.basename(L1_path)}")
