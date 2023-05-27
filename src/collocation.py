@@ -731,7 +731,6 @@ def fine_collocation(coarse_df, get_mask, get_ERA5_data, verbose=False):
         print(f"Finished fine L1 collocation for {os.path.basename(L1_path)}")
     return df
 
-
 def prepare_fine_collocation(coarse_df, verbose=False, L2=False):
     
     
@@ -806,51 +805,11 @@ def prepare_fine_collocation(coarse_df, verbose=False, L2=False):
         
         
     df = pd.DataFrame(data)
-    
+
     if verbose:
         print(f"Finished L1 collocation prep for {df.iloc[0].caliop_path}")
     return df
 
-
-def coarse_L2_collocation(path, verbose=False):
-    
-    if verbose:
-        print(f"Started coarse collocation for {os.path.basename(path)}")
-        
-    ca = CALIOP(path)
-    
-    
-    cirrus_ints = get_cirrus_fcf_integers()
-    fcfs = ca.get("Feature_Classification_Flags")
-    
-    cirrus_mask = np.isin(fcfs, cirrus_ints)
-    
-    row_mask = cirrus_mask.sum(axis=1) > 0
-    
-    # Coordinates of middle of 5 km layer
-    lats = ca.get("Latitude")[row_mask,1]
-    lons = ca.get("Longitude")[row_mask,1]
-    times = ca.get_time()[row_mask, 1]
-    
-    n_collocated = sum(row_mask)
-    
-    if n_collocated > 0:
-        
-        df = pd.DataFrame({'caliop_path' : n_collocated * [path],
-                           'caliop_mean_time' : times, 
-                           'detection_time' : n_collocated * [""],
-                            'lat': lats,
-                            'lon': lons})
-        
-        if verbose:
-            print(f"Finished coarse collocation for {os.path.basename(path)}, found {n_collocated} candidate pixels")
-
-        return df 
-    else:
-        if verbose:
-            print(f"Finished coarse collocation for {os.path.basename(path)}, no contrails found")
-        return pd.DataFrame({"result":["no collocations found"]})
-        
 
 def coarse_L2_collocation(path, verbose=False):
     
