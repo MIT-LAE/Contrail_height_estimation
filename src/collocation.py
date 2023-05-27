@@ -851,4 +851,182 @@ def coarse_L2_collocation(path, verbose=False):
             print(f"Finished coarse collocation for {os.path.basename(path)}, no contrails found")
         return pd.DataFrame({"result":["no collocations found"]})
         
+
+def coarse_L2_collocation(path, verbose=False):
+    
+    if verbose:
+        print(f"Started coarse collocation for {os.path.basename(path)}")
         
+    ca = CALIOP(path)
+    
+    
+    cirrus_ints = get_cirrus_fcf_integers()
+    fcfs = ca.get("Feature_Classification_Flags")
+    
+    cirrus_mask = np.isin(fcfs, cirrus_ints)
+    
+    row_mask = cirrus_mask.sum(axis=1) > 0
+    
+    # Coordinates of middle of 5 km layer
+    lats = ca.get("Latitude")[row_mask,1]
+    lons = ca.get("Longitude")[row_mask,1]
+    alts = ca.get("Layer_Top_Altitude")[row_mask,0]
+    times = ca.get_time()[row_mask, 1]
+    
+    n_collocated = sum(row_mask)
+    
+    if n_collocated > 0:
+        
+        df = pd.DataFrame({'caliop_path' : n_collocated * [path],
+                           'caliop_time' : times, 
+                           'detection_time' : n_collocated * [""],
+                            'lat': lats,
+                            'lon': lons,
+                             'height': alts})
+        
+        df["caliop_time"] = pd.to_datetime(df["caliop_time"])
+        
+        if verbose:
+            print(f"Finished coarse collocation for {os.path.basename(path)}, found {n_collocated} candidate pixels")
+
+        return df 
+    else:
+        if verbose:
+            print(f"Finished coarse collocation for {os.path.basename(path)}, no contrails found")
+        return pd.DataFrame({"result":["no collocations found"]})
+        
+        
+def fine_L2_collocation(coarse_df, get_ERA5_data, verbose=False):
+
+    L2_path = coarse_df.iloc[0].caliop_path
+
+    prep_df = prepare_fine_collocation(coarse_df, L2=True)
+    
+    if verbose:
+        print(f"Starting fine L2 collocation for {os.path.basename(L1_path)}")
+
+    ca = CALIOP(L2_path)
+    lons = coarse_df.lon.values
+    lats = coarse_df.lat.values
+    alts = coarse_df.height.values
+    times = np.array([pd.Timestamp(t).to_pydatetime() for t in coarse_df.caliop_time.values])
+
+    profile_ids = np.arange(len(lons))
+    
+    ascending = ca.is_ascending()
+
+    # To store results
+    data = defaultdict(list)
+
+    for i in range(len(prep_df)):
+
+        row = prep_df.iloc[i]
+        goes_product = row["product"]
+        goes_time = pd.to_datetime(row.product_time)
+
+        if ascending:
+            lat_min = row.segment_start_lat
+            lat_max = row.segment_end_lat
+        else:
+            lat_min = row.segment_end_lat
+            lat_max = row.segment_start_lat
+
+        subset_idx = (lats >= lat_min) * (lats <= lat_max)
+        
+        sub_lons = lons[subset_idx]
+        sub_lats = lats[subset_idx]
+        sub_times = times[subset_idx]
+        sub_heights = alts[subset_idx] * 1000
+        
+        weather = get_ERA5_data(goes_time)
+
+     
+        ps = map_heights_to_pressure(sub_lons, sub_lats, sub_times, sub_heights, weather)
+        #us, vs = get_interpolated_winds(lons, lats, times, heights, ps, weather)
+
+        if goes_time < TRANSITION_TIME:
+            scan_mode = 3
+        else:
+            scan_mode = 6
+
+        scan_start_time = get_scan_start_time(goes_time, scan_mode, goes_product)
+        pixel_times = get_pixel_times(scan_mode, 11, region=goes_product) \
+                        + np.datetime64(scan_start_time)
+
+
+        if "CONUS" in goes_product:
+            conus = True
+        else:
+            conus = False
+        
+        extent = [sub_lons.min(), sub_lons.max(), lat_min, lat_max]
+        
+        ABI_extent = map_geodetic_extent_to_ABI(extent, conus=conus)
+
+        sub_pixel_times = np.sort(pixel_times[ABI_extent[2]:ABI_extent[3],ABI_extent[0]:ABI_extent[1]].flatten())
+
+        median_idx = len(sub_pixel_times)//2
+        advection_time = pd.Timestamp(sub_pixel_times[median_idx]).to_pydatetime()
+
+
+        # Do advection
+        adv_lons, adv_lats = get_advected_positions(sub_lons, sub_lats, sub_times,
+                                                    sub_heights, ps, weather, advection_time)
+
+        subindices = ~(np.isnan(adv_lons)+np.isnan(adv_lats))
+        adv_lons = adv_lons[subindices]
+        adv_lats = adv_lats[subindices]
+
+        try:
+            # Invert parallax
+            lons_c, lats_c = parallax_correction_vicente_backward(adv_lons, adv_lats,
+                                                                    sub_heights[subindices])
+        except ValueError:
+            print("Parallax correction error")
+            print(goes_time, L1_path)
+            return
+
+
+        x, y = geodetic2ABI(lons_c, lats_c)
+
+        # Map to ABI coordinates
+        ABIgrid_rows, ABIgrid_cols = get_ABI_grid_locations(x,y)
+        
+        orthographic_ABI_ids = get_ortho_ids()
+
+        caliop_ids = 5424*(ABIgrid_rows) + ABIgrid_cols
+
+        n_matched = len(caliop_ids)
+        
+        if n_matched > 0:
+        
+            data["L1_file"].extend(n_matched*[os.path.basename(L2_path)])
+            data["segment_start_lat"].extend( n_matched*[row.segment_start_lat])
+            data["segment_end_lat"].extend(n_matched*[row.segment_end_lat])
+            data["segment_start_idx"].extend( n_matched*[row.start_profile_id])
+            data["segment_end_idx"].extend( n_matched*[row.end_profile_id])
+            data["profile_id"].extend(list(profile_ids[subset_idx][subindices]))
+            data["caliop_lon"].extend(list(sub_lons[subindices]))
+            data["caliop_lon_adv"].extend(list(adv_lons))
+            data["caliop_lat"].extend(list(sub_lats[subindices]))
+            data["caliop_lat_adv"].extend(list(adv_lats))
+            data["caliop_top_height"].extend(list(sub_heights[subindices]))
+            data["caliop_lon_adv_parallax"].extend(list(lons_c))
+            data["caliop_lat_adv_parallax"].extend(list(lats_c))
+            data["caliop_time"].extend(list(sub_times[subindices]))
+            data["caliop_pressure_hpa"].extend(list(ps[subindices]))
+            data["adv_time"].extend(n_matched*[advection_time])
+            data["goes_ABI_id"].extend(list(caliop_ids))
+
+            matched_rows, matched_cols = np.unravel_index(caliop_ids, (5424, 5424))
+            data["goes_ABI_row"].extend(list(matched_rows))
+            data["goes_ABI_col"].extend(list(matched_cols))
+            data["goes_product"].extend(n_matched*[goes_product])
+            data["goes_time"].extend(n_matched*[goes_time])
+            
+            
+    df = pd.DataFrame(data)
+
+    if verbose:
+        print(f"Finished fine L2 collocation for {os.path.basename(L2_path)}")
+    return df
