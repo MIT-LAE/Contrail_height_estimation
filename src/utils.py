@@ -66,3 +66,55 @@ def floor_time(t, minute_res=10):
         return dt.datetime(t.year, t.month, t.day, t.hour+1, minutes)
     else:
         return dt.datetime(t.year, t.month, t.day, t.hour, minutes)
+    
+
+
+def get_image_tile_indices(rows, cols, region_size, image_shape):
+    """
+    For given input locations (representing the centers of the tiels) within an image
+    and a 'tile size', will return the indices within the image to create these tiles.
+    
+    Parameters
+    ----------
+    rows : np.array
+        Row locations of tile centers
+    cols : np.array
+        Column locations of tile centers
+    region_size : int
+        Size of tiles
+    image_shape : np.array
+        The shape of the image from which the tiles will be taken
+        
+    Returns
+    -------
+    reg_rows : np.array
+        Array of dimensions region_size**2 by len(rows)  
+    reg_cols : np.array
+        Array of dimensions region_size**2 by len(cols)
+    """
+    
+    if region_size % 2 == 0:
+        raise ValueError("Region size needs to be odd")
+    
+    # Stack copies on top of each other to represent the regional indices
+    reg_cols = np.tile(cols, (region_size**2, 1))
+    reg_rows = np.tile(rows, (region_size**2, 1))
+
+    offsets = np.arange(-(region_size-1)//2,  1+(region_size-1)//2)
+
+    reg_cols += np.tile(offsets, (region_size))[:,np.newaxis]
+    reg_rows += np.repeat(offsets, (region_size))[:, np.newaxis]
+
+    # Find illegal indices
+    top_margins = reg_rows.min(axis=0)
+    reg_rows[:,top_margins < 0] -= top_margins[top_margins < 0]
+    bot_margins = image_shape[0] - reg_rows.max(axis=0) - 1
+    reg_rows[:,bot_margins < 0] += bot_margins[bot_margins < 0]
+    
+    left_margins = reg_cols.min(axis=0)
+    reg_cols[:,left_margins < 0] -= left_margins[left_margins < 0]
+    right_margins = image_shape[1] - reg_cols.max(axis=0) - 1
+    reg_cols[:,right_margins < 0] += right_margins[right_margins < 0]
+    
+    return reg_rows, reg_cols
+    
