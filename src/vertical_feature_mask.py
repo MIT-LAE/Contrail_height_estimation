@@ -9,6 +9,8 @@ Vincent R. Meijer (27/08/2020):
 import numpy as np
 import pandas as pd
 
+import itertools
+
 # Constant definitions.
 VFM_INTEGER_SIZE = 16
 
@@ -16,8 +18,8 @@ FEATURE_TYPE = {
     0 : "invalid",
     1 : "clear air",
     2 : "cloud",
-    3 : "aerosol",
-    4 : "stratospheric_feature",
+    3 : "tropospheric aerosol",
+    4 : "stratospheric aerosol",
     5 : "surface",
     6 : "subsurface",
     7 : "no signal (totally attenuated)",
@@ -32,9 +34,9 @@ FEATURE_TYPE_QA = {
 
 ICE_WATER_PHASE = {
     0 : "unknown / not determined",
-    1 : "randomly oriented ice",
+    1 : "ice",
     2 : "water",
-    3 : "horizontally oriented ice",
+    3 : "oriented ice crystals",
 }
 
 ICE_WATER_PHASE_QA = {
@@ -48,21 +50,11 @@ FEATURE_SUBTYPE = {
     1 : {
         0 : "clear air",
     },
-    
-    3 : {
-        0 : "not determined",
-        1 : "clean marine",
-        2 : "dust",
-        3 : "polluted continental",
-        4 : "clean continental",
-        5 : "polluted dust",
-        6 : "smoke",
-        7 : "other",
-    },
-    
+
+    # cloud subtypes
     2 : {
-        0 : "low overcast (transparent)",
-        1 : "low overcast (opaque)",
+        0 : "low overcast, transparent",
+        1 : "low overcas, opaque",
         2 : "transition stratocumulus",
         3 : "low, broken cumulus",
         4 : "altocumulus (transparent)",
@@ -70,13 +62,26 @@ FEATURE_SUBTYPE = {
         6 : "cirrus (transparent)",
         7 : "deep convective (opaque)",
     },
-    
-    4 : {
+
+    # tropospheric aerosol sub-types
+    3 : {
         0 : "not determined",
-        1 : "non-depolarizing PSC",
-        2 : "depolarizing PSC",
-        3 : "non-depolarizing aerosol",
-        4 : "depolarizing aerosol",
+        1 : "clean marine",
+        2 : "dust",
+        3 : "polluted continental/smoke",
+        4 : "clean continental",
+        5 : "polluted dust",
+        6 : "elevated smoke",
+        7 : "dusty marine",
+    },
+
+    # stratospheric aerosol sub-types
+    4 : {
+        0 : "invalid",
+        1 : "PSC aerosol",
+        2 : "volcanic ash",
+        3 : "sulfate/other",
+        4 : "elevated smoke",
         5 : "spare",
         6 : "spare",
         7 : "other",
@@ -95,7 +100,7 @@ FEATURE_SUBTYPE = {
     },
 }
 
-CLOUD_AEROSOL_PSC_TYPE_QA = {
+CLOUD_AEROSOL_TYPE_QA = {
     0 : "not confident",
     1 : "confident",
 }
@@ -109,9 +114,66 @@ HORIZONTAL_AVERAGING = {
     5 : "80 km",
 }
 
+def get_fcf_bitstring(feature_type, feature_type_qa, ice_water_phase, ice_water_phase_qa,
+                 feature_subtype, cloud_aerosol_type_qa, horizontal_averaging):
+    """
+    Returns the bitstring corresponding to a particular decoded feature classification flag.
+    """
+    
+    def find_key(d, vq):
+        
+        for k, v  in d.items():
+            if v == vq:
+                return k
+        return None
+    
+    
+    bitstring = ""
+    
+    feature_type_int = find_key(FEATURE_TYPE, feature_type)
+    feature_type_qa_int = find_key(FEATURE_TYPE_QA, feature_type_qa)
+    ice_water_phase_int = find_key(ICE_WATER_PHASE, ice_water_phase)
+    ice_water_phase_qa_int = find_key(ICE_WATER_PHASE_QA, ice_water_phase_qa)
+    feature_subtype_int = find_key(FEATURE_SUBTYPE[feature_type_int], feature_subtype)
+    cloud_aerosol_type_qa_int = find_key(CLOUD_AEROSOL_TYPE_QA, cloud_aerosol_type_qa)
+    horizontal_averaging_int = find_key(HORIZONTAL_AVERAGING, horizontal_averaging)
+    
+    integers = [horizontal_averaging_int, cloud_aerosol_type_qa_int, feature_subtype_int,
+                ice_water_phase_qa_int, ice_water_phase_int, feature_type_qa_int, feature_type_int]
+    
+   
+    lengths = [3, 1, 3, 2, 2, 2, 3]
+    for integer, length in zip(integers, lengths):
+        
+        bitstring += bin(integer)[2:].zfill(length)
+        
+    
+    return bitstring
+    
+    
+    
+
+def get_cirrus_fcf_integers():
+    
+    ice_water_phase = ["ice", "oriented ice crystals"]
+    cloud_sub_type = ["cirrus (transparent)", "deep convective (opaque)"]
+    cloud_aerosol_type_qa = ["not confident", "confident"]
+    horizontal_averaging = list(HORIZONTAL_AVERAGING.values())
+    
+    integers = []
+    for comb in itertools.product(ice_water_phase, cloud_sub_type, cloud_aerosol_type_qa, horizontal_averaging):
+        
+        bstring = get_fcf_bitstring("cloud", "high", comb[0], "high", comb[1], comb[2], comb[3])
+        
+        integers.append(int(bstring,2))
+        
+    return integers
+        
+    
 
 def digital_to_binary(a):
-    
+    a
+
     a = np.asarray(a)
     
     # Ensures the result is a big-endian of the appropriate size.
@@ -264,7 +326,7 @@ def _interpret_feature_flags(vfm):
         FEATURE_SUBTYPE[vfm["feature_type"]][vfm["feature_subtype"]]
         
     feature_subtype_qa = \
-        FEATURE_TYPE_QA[vfm["feature_subtype_qa"]]
+        CLOUD_AEROSOL_TYPE_QA[vfm["feature_subtype_qa"]]
     
     horizontal_averaging = \
         HORIZONTAL_AVERAGING[vfm["horizontal_averaging"]]
