@@ -12,6 +12,8 @@ from contrails.meteorology.advection import *
 from abi import *
 from utils import *
 
+from vertical_feature_mask import *
+
 
 # Time when Full Disk GOES-16 product refresh rate changed from 15 to 10 minutes
 TRANSITION_TIME = dt.datetime(2019, 4, 2)
@@ -730,7 +732,7 @@ def fine_collocation(coarse_df, get_mask, get_ERA5_data, verbose=False):
     return df
 
 
-def prepare_fine_collocation(coarse_df, verbose=False):
+def prepare_fine_collocation(coarse_df, verbose=False, L2=False):
     
     
     if "result" in coarse_df.columns:
@@ -741,10 +743,16 @@ def prepare_fine_collocation(coarse_df, verbose=False):
         print(f"Started L1 collocation prep for {coarse_df.iloc[0].caliop_path}")
 
     ca = CALIOP(coarse_df.iloc[0].caliop_path)
-    lons = ca.get("Longitude").data[:,0]
-    lats = ca.get("Latitude").data[:,0]
-    times = ca.get_time()[:,0]
-    
+    if L2:
+        lons = ca.get("Longitude")[:,1]
+        lats = ca.get("Latitude")[:,1]
+        times = ca.get_time()[:,1]
+        
+    else:
+        lons = ca.get("Longitude").data[:,0]
+        lats = ca.get("Latitude").data[:,0]
+        times = ca.get_time()[:,0]
+        
     ascending = ca.is_ascending()
 
     # Segment overpass
@@ -803,3 +811,44 @@ def prepare_fine_collocation(coarse_df, verbose=False):
         print(f"Finished L1 collocation prep for {df.iloc[0].caliop_path}")
     return df
 
+
+def coarse_L2_collocation(path, verbose=False):
+    
+    if verbose:
+        print(f"Started coarse collocation for {os.path.basename(path)}")
+        
+    ca = CALIOP(path)
+    
+    
+    cirrus_ints = get_cirrus_fcf_integers()
+    fcfs = ca.get("Feature_Classification_Flags")
+    
+    cirrus_mask = np.isin(fcfs, cirrus_ints)
+    
+    row_mask = cirrus_mask.sum(axis=1) > 0
+    
+    # Coordinates of middle of 5 km layer
+    lats = ca.get("Latitude")[row_mask,1]
+    lons = ca.get("Longitude")[row_mask,1]
+    times = ca.get_time()[row_mask, 1]
+    
+    n_collocated = sum(row_mask)
+    
+    if n_collocated > 0:
+        
+        df = pd.DataFrame({'caliop_path' : n_collocated * [path],
+                           'caliop_mean_time' : times, 
+                           'detection_time' : n_collocated * [""],
+                            'lat': lats,
+                            'lon': lons})
+        
+        if verbose:
+            print(f"Finished coarse collocation for {os.path.basename(path)}, found {n_collocated} candidate pixels")
+
+        return df 
+    else:
+        if verbose:
+            print(f"Finished coarse collocation for {os.path.basename(path)}, no contrails found")
+        return pd.DataFrame({"result":["no collocations found"]})
+        
+        
