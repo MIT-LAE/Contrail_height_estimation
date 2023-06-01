@@ -69,10 +69,15 @@ def floor_time(t, minute_res=10):
     
 
 
+
+
 def get_image_tile_indices(rows, cols, region_size, image_shape):
     """
-    For given input locations (representing the centers of the tiels) within an image
+    For given input locations (representing the approximate centers of the tiles) within an image
     and a 'tile size', will return the indices within the image to create these tiles.
+    
+    If the region_size is not odd, the given 'rows' and 'cols' will not correspond to
+    the tile centers.
     
     Parameters
     ----------
@@ -94,13 +99,15 @@ def get_image_tile_indices(rows, cols, region_size, image_shape):
     """
     
     if region_size % 2 == 0:
-        raise ValueError("Region size needs to be odd")
+        surplus = 0
+    else:
+        surplus = 1
     
     # Stack copies on top of each other to represent the regional indices
     reg_cols = np.tile(cols, (region_size**2, 1))
     reg_rows = np.tile(rows, (region_size**2, 1))
 
-    offsets = np.arange(-(region_size-1)//2,  1+(region_size-1)//2)
+    offsets = np.arange(-(region_size-surplus)//2,  surplus+(region_size-surplus)//2)
 
     reg_cols += np.tile(offsets, (region_size))[:,np.newaxis]
     reg_rows += np.repeat(offsets, (region_size))[:, np.newaxis]
