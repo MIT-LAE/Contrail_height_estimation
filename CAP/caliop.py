@@ -6,9 +6,9 @@ from pyhdf.SD import SD, SDC
 from pyhdf import HDF, VS
 import skimage.measure
 
-from geometry import *
-from vertical_feature_mask import interpret_vfm
-from visualization import *
+from .geometry import *
+from .vertical_feature_mask import interpret_vfm
+from .visualization import *
 
 from contrails.numerics.algorithms import *
 

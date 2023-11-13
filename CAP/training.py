@@ -10,7 +10,7 @@ from quantnn.quantiles import posterior_mean
 import pytorch_warmup as warmup
 from contrails.satellites.goes.abi import get_ash
 
-from dataset import *
+from .dataset import *
 
 channel_means = np.array([277.8691272 , 231.85395151, 239.58358231, 246.85718799,
        265.97517924, 249.26745457, 267.63629401, 266.38283615,

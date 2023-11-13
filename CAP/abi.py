@@ -2,7 +2,7 @@ import numpy as np, datetime as dt
 import xarray as xr
 import cartopy.crs as ccrs
 
-from utils import *
+from .utils import *
 
 # location of the CONUS upper left corner in the Full disk ABI grid
 CONUS_FIRST_COL = 902

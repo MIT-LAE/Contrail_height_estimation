@@ -5,14 +5,14 @@ from collections import defaultdict
 
 import datetime as dt
 import scipy.interpolate
-from caliop import *
-from geometry import *
+from .caliop import *
+from .geometry import *
 
 from contrails.meteorology.advection import *
-from abi import *
-from utils import *
+from .abi import *
+from .utils import *
 
-from vertical_feature_mask import *
+from .vertical_feature_mask import *
 
 
 # Time when Full Disk GOES-16 product refresh rate changed from 15 to 10 minutes

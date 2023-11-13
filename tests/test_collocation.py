@@ -1,5 +1,5 @@
 import numpy as np
-from src.collocation import *
+from CAP.collocation import *
 import pytest
 import xarray as xr, datetime as dt
 
@@ -24,7 +24,6 @@ def test_geometricaltitude2pressure():
     assert pytest.approx(p,rel=1e-1) == analytical
 
 
-def test_parallax_correction_vicente():
 
     
 

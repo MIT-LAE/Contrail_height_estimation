@@ -1,5 +1,5 @@
 import numpy as np
-from src.geometry import *
+from CAP.geometry import *
 import pytest
 
 
