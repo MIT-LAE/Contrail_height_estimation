@@ -10,7 +10,7 @@ from .geometry import *
 from .vertical_feature_mask import interpret_vfm
 from .visualization import *
 
-from contrails.numerics.algorithms import *
+from .interpolation import interp2d_12
 
 PROJECTION_PATH = '/net/d13/data/vmeijer/reprojections/'
 
