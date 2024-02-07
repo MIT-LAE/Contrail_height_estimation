@@ -197,8 +197,9 @@ def segment_caliop_product(lons, lats, times):
     # Closest CONUS product time to each profile in the L1 product
     conus_times = [round_conus_time(t) for t in times]
     
-    # Determine whether orbit is ascending (i.e. moving northward) or descending (moving southward)
-    # We can use this method only because we know that every latitude is positive due to the
+    # Determine whether orbit is ascending (i.e. moving northward) or
+    # descending (moving southward). We can use this method only because we
+    # know that every latitude is positive due to the
     # online subsetting we've done.
     ascending = (lats[0] - lats[-1]) < 0
     
@@ -781,7 +782,8 @@ def fine_L2_collocation(coarse_df, get_ERA5_data, verbose=False):
         else:
             scan_mode = 6
 
-        scan_start_time = get_scan_start_time(goes_time, scan_mode, goes_product)
+        scan_start_time = get_scan_start_time(goes_time, scan_mode,
+                                                goes_product)
         pixel_times = get_pixel_times(scan_mode, 11, region=goes_product) \
                         + np.datetime64(scan_start_time)
 
