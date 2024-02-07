@@ -44,7 +44,7 @@ def apply_cloud_filter(b532, b1064,
     Filters out noise in CALIOP L1 profiles based on thresholding the
     backscatter values. 
 
-    Default parmaters are as suggested by Iwabuchi et al. (2012)
+    Default parameters are as suggested by Iwabuchi et al. (2012)
     
     Parameters
     ----------
