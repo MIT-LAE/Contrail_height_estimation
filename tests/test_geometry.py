@@ -29,7 +29,7 @@ def test_get_haversine():
     lon1 = 180
     lat1 = 0 
     result = get_haversine(lon0, lat0, lon1, lat1)
-    assert pytest.approx(result, 1) == np.pi * RADIUS_EARTH
+    assert pytest.approx(result, 1) == np.pi * RADIUS_EARTH / 1000
 
 
 def test_greatcirclepath():
@@ -39,7 +39,7 @@ def test_greatcirclepath():
 
     path = GreatCirclePath(0, 0, 180, 0)
     dist = path.get_crosstrack_distance(0, 90)
-    assert pytest.approx(np.abs(dist), 1) == 0.5*np.pi * RADIUS_EARTH
+    assert pytest.approx(np.abs(dist), 1) == 0.5*np.pi * RADIUS_EARTH / 1000
 
 
 def test_ECEF2geodetic():

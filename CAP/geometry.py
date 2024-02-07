@@ -286,7 +286,8 @@ def get_haversine(lon0, lat0, lon1, lat1):
     haversine: float
         Haversine distance in km
     """ 
-    return RADIUS_EARTH * get_angular_distance(lon0, lat0, lon1, lat1)
+    # Divide by 1000 to convert from meter to kilometer
+    return RADIUS_EARTH * get_angular_distance(lon0, lat0, lon1, lat1) / 1000
    
         
 def get_angular_distance(lon0, lat0, lon1, lat1):
