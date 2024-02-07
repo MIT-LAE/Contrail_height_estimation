@@ -23,6 +23,12 @@ from .vertical_feature_mask import get_cirrus_fcf_integers
 CALIOP_HORIZONTAL_RESOLUTION = 333 # m
 CALIOP_VERTICAL_RESOLUTION = 30 # m
 
+# See Iwabuchi et al. (2012), section 3.3:
+# https://agupubs.onlinelibrary.wiley.com/doi/full/10.1029/2011JD017020
+BACKSCATTER_THRESHOLD = 0.003 # km^-1 sr^-1
+WIDTH_THRESHOLD = 1000 # meter
+THICKNESS_THRESHOLD = 60 # meter
+
 # TODO: Remove me when open sourcing
 ASSET_PATH = "/home/vmeijer/contrails/contrails/satellites/assets/"
 
@@ -32,8 +38,10 @@ COLUMNS = ["Layer_Top_Altitude", "Layer_Base_Altitude",
             "Feature_Optical_Depth_Uncertainty_532", "Ice_Water_Path",
             "Ice_Water_Path_Uncertainty", "Snow_Ice_Surface_Type"]
 
-def apply_cloud_filter(b532, b1064, backscatter_threshold=0.003,
-            width_threshold=2000, thickness_threshold=100, area_threshold=10):
+def apply_cloud_filter(b532, b1064, 
+            backscatter_threshold=BACKSCATTER_THRESHOLD
+            width_threshold=WIDTH_THRESHOLD, 
+            thickness_threshold=THICKNESS_THRESHOLD, area_threshold=10):
     """
     Filters out noise in CALIOP L1 profiles based on thresholding the
     backscatter values. 
@@ -71,20 +79,19 @@ def apply_cloud_filter(b532, b1064, backscatter_threshold=0.003,
     to_remove = []
     for c in regionprops(ccl):
         
+        # Bounding box of connected component
         box = c.bbox
 
-        # Horizontal resolution is 333 m
-        width = (box[3] - box[1])*333
-
-        # Vertical resolution is 30 m
-        thickness = (box[2]-box[0])*30
+        # Get width and thickness in meters
+        width = (box[3] - box[1]) * CALIOP_HORIZONTAL_RESOLUTION
+        thickness = (box[2]-box[0]) * CALIOP_VERTICAL_RESOLUTION
         
-
+        # Check threshold conditions
         conds = [thickness < thickness_threshold,
                 width < width_threshold,
                 c.area < area_threshold]
 
-        if np.all(conds):
+        if np.any(conds):
             to_remove.append(c.label)
     
     negative_mask = np.isin(ccl, to_remove)
