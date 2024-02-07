@@ -6,12 +6,11 @@ from .constants import GRS80_PARAMS
 from .utils import floor_time, get_numpy_asset, get_netcdf_asset, get_ortho_ids
 
 
-
 GOES16_PARAMS = {"h": 35786.0234375*1000., "lon_0": -75.2}
 
 # Location of the CONUS product upper left corner in the Full Disk ABI grid
 # Obtained from page 26 in 
-# https://www.goes-r.gov/products/docs/PUG-L2+-vol3.pdf
+# https://www.goes-r.gov/users/docs/PUG-L1b-vol3.pdf
 # PUG Volume 3: Level 1b Products
 # DCN 7035538, Revision H.1
 CONUS_FIRST_COL = 902
