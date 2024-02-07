@@ -46,8 +46,8 @@ class GroundTrack:
         # Find index
         idx = np.argmin(np.abs(self.lats - approx_lat))
 
-        self.segments = [GreatCirclePath(self.lons[0], self.lats[0], self.lons[idx],
-                            self.lats[idx])]
+        self.segments = [GreatCirclePath(self.lons[0], self.lats[0],
+                            self.lons[idx], self.lats[idx])]
 
         for _ in range(1, self.n_segments-1):
 
@@ -91,7 +91,8 @@ class GroundTrack:
         points = []
 
         for i in range(self.n_segments):
-            coords = self.segments[i].get_coordinates(n_points=points_per_segment)
+            coords = self.segments[i].get_coordinates(
+                                    n_points=points_per_segment)
             points.append(coords)
 
         stacked = np.hstack(points)
@@ -180,12 +181,15 @@ class GreatCirclePath:
             Distance in km 
         """ 
         
-        bearing_start_end = np.radians(get_bearing(self.lon0, self.lat0, self.lon1, self.lat1))
-        bearing_start_third = np.radians(get_bearing(self.lon0, self.lat0, lon, lat))
+        bearing_start_end = np.radians(get_bearing(self.lon0, self.lat0,
+                                                    self.lon1, self.lat1))
+        bearing_start_third = np.radians(get_bearing(self.lon0, self.lat0,
+                                                        lon, lat))
         
         angular_distance = get_angular_distance(self.lon0, self.lat0, lon, lat)
         
-        dist = np.arcsin(np.sin(angular_distance)*np.sin(bearing_start_third-bearing_start_end))*RADIUS_EARTH
+        dist = np.arcsin(np.sin(angular_distance) \ 
+                * np.sin(bearing_start_third-bearing_start_end)) * RADIUS_EARTH
         return dist
     
     def get_coordinates(self, n_points=100):
