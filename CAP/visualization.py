@@ -1,13 +1,14 @@
+import os
+import math
+import datetime as dt
+from typing import List
+
 import numpy as np 
 import matplotlib as mpl
 import matplotlib.pyplot as plt
 from mpl_toolkits.axes_grid1.anchored_artists import AnchoredSizeBar
 import matplotlib.patches as patches
 
-import datetime as dt
-import os
-from typing import List
-import math
 
 # Default time locator and formatter settings for class `TimeLocator`
 TIMELOCATOR_STEPS = [1, 2, 5, 10, 15, 30, 300, 600, 900]
