@@ -39,6 +39,13 @@ ORTHO_PROJ = ccrs.Orthographic(central_latitude=39.8283,
 N_ORTHO_ROWS = 2000
 N_ORTHO_COLS = 3000
 
+# This marks the date on which the GOES-16 ABI instrument operating mode
+# was switched from mode 3 to mode 6.
+# From this date onward (16:00 UTC on April 2nd, 2019), the ABI instrument
+# scans the full disk every 10 minutes instead of every 15 minutes.
+# See: https://www.goes-r.gov/users/abiScanModeInfo.html
+TRANSITION_TIME = dt.datetime(2019, 4, 2)
+
 # Table A1. from Carr et al. (2020)
 # https://www.mdpi.com/2072-4292/12/22/3779
 # contains the time offsets of the ABI bands in second

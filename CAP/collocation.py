@@ -13,7 +13,7 @@ from .geometry import parallax_correction_vicente_backward
 from .advection import interpolate_winds, advection_rhs
 from .abi import (get_ABI_grid_locations, geodetic2ABI, CONUS_FIRST_COL,
                 CONUS_FIRST_ROW, get_scan_start_time, get_pixel_times,
-                map_geodetic_extent_to_ABI)
+                map_geodetic_extent_to_ABI, TRANSITION_TIME)
 from .utils import (get_lons, get_lats, get_ortho_ids, get_netcdf_asset)
 from .vertical_feature_mask import get_cirrus_fcf_integers
 
@@ -22,9 +22,6 @@ from .vertical_feature_mask import get_cirrus_fcf_integers
 # Refers to L1b product resolution
 CALIOP_HORIZONTAL_RESOLUTION = 333 # m
 CALIOP_VERTICAL_RESOLUTION = 30 # m
-
-# Time when Full Disk GOES-16 product refresh rate changed from 15 to 10 min.
-TRANSITION_TIME = dt.datetime(2019, 4, 2)
 
 # TODO: Remove me when open sourcing
 ASSET_PATH = "/home/vmeijer/contrails/contrails/satellites/assets/"
