@@ -30,9 +30,6 @@ BACKSCATTER_THRESHOLD = 0.003 # km^-1 sr^-1
 WIDTH_THRESHOLD = 1000 # meter
 THICKNESS_THRESHOLD = 60 # meter
 
-# TODO: Remove me when open sourcing
-ASSET_PATH = "/home/vmeijer/contrails/contrails/satellites/assets/"
-
 COLUMNS = ["Layer_Top_Altitude", "Layer_Base_Altitude",
             "Feature_Classification_Flags", "ExtinctionQC_532",
             "Opacity_Flag", "Feature_Optical_Depth_532",
