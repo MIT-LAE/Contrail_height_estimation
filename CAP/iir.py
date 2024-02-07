@@ -1,4 +1,4 @@
-from .caliop import *
+from .caliop import CALIOP
 
 IIR_CENTRAL_WAVELENGTH = {1 : 8.621, 2 : 10.635, 3 : 12.058}
 IIR_A0 = {1 : -0.768212, 2 : -0.302290, 3 : -0.466275}
