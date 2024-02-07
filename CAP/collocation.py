@@ -30,6 +30,17 @@ BACKSCATTER_THRESHOLD = 0.003 # km^-1 sr^-1
 WIDTH_THRESHOLD = 1000 # meter
 THICKNESS_THRESHOLD = 60 # meter
 
+# Altitude thresholds used in paper
+MINIMUM_ALTITUDE = 8.0 # km
+MAXIMUM_ALTITUDE = 15.0 # km
+
+# This is the geodetic extent used to subset CALIOP data in the CALIPSO
+# subsetting web app https://subset.larc.nasa.gov/calipso/login.php
+# It covers the contrail detection domain from Meijer et al. (2022)
+# The order is [min_lon, max_lon, min_lat, max_lat]
+CALIOP_SUBSET_EXTENT = [-135, -45, 10, 55]
+
+
 COLUMNS = ["Layer_Top_Altitude", "Layer_Base_Altitude",
             "Feature_Classification_Flags", "ExtinctionQC_532",
             "Opacity_Flag", "Feature_Optical_Depth_532",
@@ -235,8 +246,9 @@ def segment_caliop_product(lons, lats, times):
     
     scan_rows = label_scan_rows(lons, lats)
     
-    # Loop through unique times and check whether the CONUS pixel times corresponding to the 
-    # part of the CALIOP orbit are sufficiently close. If not, split the track
+    # Loop through unique times and check whether the CONUS pixel times
+    # corresponding to the part of the CALIOP orbit are sufficiently close. 
+    # If not, split the track
     
     segment_boundaries = []
     for unique_time in unique_times:
@@ -258,7 +270,8 @@ def segment_caliop_product(lons, lats, times):
             
             for i in range(1, len(unique_rows)):
                 
-                boundary_lat = sub_lats[np.where(scan_rows[idx] == unique_rows[i])[0][0]]
+                boundary_lat = sub_lats[np.where(scan_rows[idx] \
+                                            == unique_rows[i])[0][0]]
         
                 segment_boundaries.append((previous_lat, boundary_lat))
                 previous_lat = boundary_lat
@@ -271,8 +284,8 @@ def segment_caliop_product(lons, lats, times):
 
 def extract_heights(profile_ids, cloud_mask, lidar_alts):
     """
-    Extract top and bottom height of the clouds within cloud_mask at the columns
-    given within profile_id.
+    Extract top and bottom height of the clouds within cloud_mask at the
+    columns given within profile_id.
     
     Parameters
     ----------
@@ -315,6 +328,13 @@ def coarse_collocation(path, get_mask, threshold_dist=50.0, conus=False,
     by checking whether any contrails have been detected on GOES-16 images
     that were captured during the CALIPSO overpass. 
 
+    50 km is the default threshold distance used in the paper. Rationale:
+    The maximum possible time between a contrail observed in a GOES-16 image
+    and the time that CALIPSO is near it is about 15 minutes, since we use
+    the average time for the CALIPSO overpass (which tends to be ~30 minutes
+    long). Thus, assuming a max wind speed of 60 m/s, we find an advection time
+    of about 50 km in these 15 minutes.
+
     Parameters
     ----------
     path:  str
@@ -344,7 +364,7 @@ def coarse_collocation(path, get_mask, threshold_dist=50.0, conus=False,
     # Take approximate average time 
     t = times[len(times)//2,0]
     
-    # Minutes between each ABI-L2-MCMIPF product 
+    # Minutes between each ABI-L2-MCMIP product 
     if conus:
         minute_interval = 5
     else:
@@ -390,7 +410,8 @@ def coarse_collocation(path, get_mask, threshold_dist=50.0, conus=False,
             delta += 1
     
     if not found:
-        raise FileNotFoundError("No detections at " + ", ".join([str(t) for t in times_tried]))
+        raise FileNotFoundError("No detections at " \
+                            + ", ".join([str(t) for t in times_tried]))
         
     collocated = (mask==1.0)*collocation_mask
     
@@ -445,7 +466,7 @@ def fine_collocation(coarse_df, get_mask, get_ERA5_data, verbose=False):
     profile_lats = ca.get("Latitude").data[:,0]
     profile_ids = np.arange(len(profile_lons))
 
-    ascending = profile_lats[-1] > profile_lats[0] #ca.is_ascending()
+    ascending = profile_lats[-1] > profile_lats[0]
 
     # To store results
     data = defaultdict(list)
@@ -466,28 +487,36 @@ def fine_collocation(coarse_df, get_mask, get_ERA5_data, verbose=False):
         subset_idx = (profile_lats >= lat_min) * (profile_lats <= lat_max)
 
         # Subset caliop data
-        extent = [-135, -45, lat_min, lat_max]
+        extent = CALIOP_SUBSET_EXTENT[:2] + [lat_min, lat_max]
 
-        cloud_mask, b532, b1064, lons, lats, times = ca.get_cloud_filter(extent=extent,
-                                            return_backscatters=True, min_alt=8, max_alt=15)
+        cloud_mask, b532, b1064, lons, lats, times = ca.get_cloud_filter(
+                                            extent=extent,
+                                            return_backscatters=True,
+                                            min_alt=MINIMUM_ALTITUDE,
+                                            max_alt=MAXIMUM_ALTITUDE)
 
         extent[0] = lons.min()
         extent[1] = lons.max()
 
-
         weather = get_ERA5_data(goes_time)
+        
+        heights = np.linspace(MINIMUM_ALTITUDE * 1000, MAXIMUM_ALTITUDE * 1000,
+                    cloud_mask.shape[0])[::-1][np.argmax(cloud_mask, axis=0)]
+        heights[heights == MAXIMUM_ALTITUDE] = np.nan
 
-        heights = np.linspace(8e3, 15e3, cloud_mask.shape[0])[::-1][np.argmax(cloud_mask, axis=0)]
-        heights[heights == 15.0e3] = np.nan
         ps = map_heights_to_pressure(lons, lats, times, heights, weather)
-        #us, vs = get_interpolated_winds(lons, lats, times, heights, ps, weather)
 
         if goes_time < TRANSITION_TIME:
             scan_mode = 3
         else:
             scan_mode = 6
 
-        scan_start_time = get_scan_start_time(goes_time, scan_mode, goes_product)
+        scan_start_time = get_scan_start_time(goes_time, scan_mode,
+                                                goes_product)
+
+        # Take GOES-16 ABI band 11 as representative
+        # as it is used during the contrail detection process described
+        # in Meijer et al. (2022)
         pixel_times = get_pixel_times(scan_mode, 11, region=goes_product) \
                         + np.datetime64(scan_start_time)
 
@@ -498,10 +527,14 @@ def fine_collocation(coarse_df, get_mask, get_ERA5_data, verbose=False):
             conus = False
 
         ABI_extent = map_geodetic_extent_to_ABI(extent, conus=conus)
-        # domain_idx = (goes_lons >= extent[0])*(goes_lons <= extent[1])\
-        #         *(goes_lats >= extent[2])*(goes_lats <= extent[3])
-        sub_times = np.sort(pixel_times[ABI_extent[2]:ABI_extent[3],ABI_extent[0]:ABI_extent[1]].flatten())
 
+        sub_times = np.sort(pixel_times[ABI_extent[2]:ABI_extent[3],
+                                    ABI_extent[0]:ABI_extent[1]].flatten())
+
+        # Pixel time advected to is the median time
+        # the difference among these times is usually small (< 5 seconds)
+        # but can have outliers if near the swath edges
+        # hence take the 'median', not the average
         median_idx = len(sub_times)//2
         advection_time = pd.Timestamp(sub_times[median_idx]).to_pydatetime()
 
@@ -542,7 +575,7 @@ def fine_collocation(coarse_df, get_mask, get_ERA5_data, verbose=False):
         orthographic_ABI_ids = get_ortho_ids()
         contrail_ids = orthographic_ABI_ids[mask==1.0]
 
-        caliop_ids = 5424*(ABIgrid_rows) + ABIgrid_cols
+        caliop_ids = N_ABI_FD_COLS * ABIgrid_rows + ABIgrid_cols
         matched = np.isin(caliop_ids, contrail_ids.astype(np.int64))
 
         # Store results
@@ -574,7 +607,8 @@ def fine_collocation(coarse_df, get_mask, get_ERA5_data, verbose=False):
             data["adv_time"].extend(n_matched*[advection_time])
             data["goes_ABI_id"].extend(list(caliop_ids[matched]))
 
-            matched_rows, matched_cols = np.unravel_index(caliop_ids[matched], (5424, 5424))
+            matched_rows, matched_cols = np.unravel_index(caliop_ids[matched],
+                                                (N_ABI_FD_ROWS, N_ABI_FD_ROWS))
             data["goes_ABI_row"].extend(list(matched_rows))
             data["goes_ABI_col"].extend(list(matched_cols))
             data["goes_product"].extend(n_matched*[goes_product])
@@ -582,7 +616,6 @@ def fine_collocation(coarse_df, get_mask, get_ERA5_data, verbose=False):
             
             
     df = pd.DataFrame(data)
-    # df.to_csv(save_path)
     if verbose:
         print(f"Finished fine L1 collocation for {os.path.basename(L1_path)}")
     return df
@@ -594,7 +627,8 @@ def prepare_fine_collocation(coarse_df, verbose=False, L2=False):
         return
 
     if verbose:
-        print(f"Started L1 collocation prep for {coarse_df.iloc[0].caliop_path}")
+        print("Started L1 collocation prep for "\
+                + f"{coarse_df.iloc[0].caliop_path}")
 
 
     ca = CALIOP(coarse_df.iloc[0].caliop_path)
@@ -608,7 +642,10 @@ def prepare_fine_collocation(coarse_df, verbose=False, L2=False):
         lats = ca.get("Latitude").data[:,0]
         times = ca.get_time()[:,0]
 
-        mask = (lats >= 10) * (lats <= 55) * (lons >= -135) * (lons <= -45)
+        mask = (lats >= CALIOP_SUBSET_EXTENT[2]) \
+                * (lats <= CALIOP_SUBSET_EXTENT[3]) \
+                * (lons >= CALIOP_SUBSET_EXTENT[0]) \
+                * (lons <= CALIOP_SUBSET_EXTENT[1])
         lons = lons[mask]
         lats = lats[mask]
         times = times[mask]
@@ -616,15 +653,14 @@ def prepare_fine_collocation(coarse_df, verbose=False, L2=False):
     if len(lats) == 0:
         print(f"No coarse collocations found in domain, skipping")
         return
+
+    # If last latitude is greater than first, orbit is ascending.
+    # This only works for the subsetted CALIOP data we are using in this work
+    # as we have the guarantee that the latitude is either monotonically
+    # increasing or decreasing
     ascending = lats[-1] > lats[0]
 
-    # Segment overpass
-    #try:
-    
     segments = segment_caliop_product(lons, lats, times)
-
-    # except ValueError:
-    #     return
     
     # To store results
     data = defaultdict(list)
@@ -632,12 +668,15 @@ def prepare_fine_collocation(coarse_df, verbose=False, L2=False):
 
     for segment in segments:
      
-        # Check if there were any contrails nearby according to coarse collocation
+        # Check if there were any contrails nearby according to coarse
+        # collocation
         if ascending:
-            sub_coarse = coarse_df[(coarse_df.lat >= segment[0])*(coarse_df.lat <= segment[1])]
+            sub_coarse = coarse_df[(coarse_df.lat >= segment[0])\
+                                    *(coarse_df.lat <= segment[1])]
             idx = (lats >= segment[0])*(lats <= segment[1])
         else:
-            sub_coarse = coarse_df[(coarse_df.lat >= segment[1])*(coarse_df.lat <= segment[0])]
+            sub_coarse = coarse_df[(coarse_df.lat >= segment[1])\
+                                    *(coarse_df.lat <= segment[0])]
             idx = (lats >= segment[1])*(lats <= segment[0])
             
         # If there were no contrails nearby, skip to next segment
@@ -651,9 +690,9 @@ def prepare_fine_collocation(coarse_df, verbose=False, L2=False):
         sub_times = times[idx]
         
         # Take halfway point
-        halfway_lat = sub_lats[len(sub_lats)//2]
-        halfway_lon = sub_lons[len(sub_lats)//2]
-        halfway_time = sub_times[len(sub_lats)//2]
+        halfway_lat = sub_lats[len(sub_lats) // 2]
+        halfway_lon = sub_lons[len(sub_lats) // 2]
+        halfway_time = sub_times[len(sub_lats) // 2]
         
         # Compute ABI grid location of halfway point
         x, y = geodetic2ABI(halfway_lon, halfway_lat)
@@ -675,7 +714,8 @@ def prepare_fine_collocation(coarse_df, verbose=False, L2=False):
     df = pd.DataFrame(data)
 
     if verbose:
-        print(f"Finished L1 collocation prep for {coarse_df.iloc[0].caliop_path}")
+        print("Finished L1 collocation prep for "\
+                + f"{coarse_df.iloc[0].caliop_path}")
     return df
 
 
@@ -686,12 +726,10 @@ def coarse_L2_collocation(path, verbose=False):
         
     ca = CALIOP(path)
     
-    
+    # Figure out which L2 layers are for cirrus
     cirrus_ints = get_cirrus_fcf_integers()
     fcfs = ca.get("Feature_Classification_Flags")
-    
     cirrus_mask = np.isin(fcfs, cirrus_ints)
-    
     row_mask = cirrus_mask.sum(axis=1) > 0
     
     # Coordinates of middle of 5 km layer
@@ -714,12 +752,14 @@ def coarse_L2_collocation(path, verbose=False):
         df["caliop_time"] = pd.to_datetime(df["caliop_time"])
         
         if verbose:
-            print(f"Finished coarse collocation for {os.path.basename(path)}, found {n_collocated} candidate cirrus layers")
+            print(f"Finished coarse collocation for {os.path.basename(path)},"\
+                + f" found {n_collocated} candidate cirrus layers")
 
         return df 
     else:
         if verbose:
-            print(f"Finished coarse collocation for {os.path.basename(path)}, no cirrus found")
+            print(f"Finished coarse collocation for {os.path.basename(path)},"\
+                +" no cirrus found")
         return pd.DataFrame({"result":["no collocations found"]})
         
         
@@ -737,7 +777,8 @@ def fine_L2_collocation(coarse_df, get_ERA5_data, verbose=False):
     lons = coarse_df.lon.values
     lats = coarse_df.lat.values
     alts = coarse_df.height.values
-    times = np.array([pd.Timestamp(t).to_pydatetime() for t in coarse_df.caliop_time.values])
+    times = np.array([pd.Timestamp(t).to_pydatetime() for \
+                        t in coarse_df.caliop_time.values])
 
     profile_ids = np.arange(len(lons))
     
@@ -764,13 +805,15 @@ def fine_L2_collocation(coarse_df, get_ERA5_data, verbose=False):
         sub_lons = lons[subset_idx]
         sub_lats = lats[subset_idx]
         sub_times = times[subset_idx]
+
+        # Convert km to m
         sub_heights = alts[subset_idx] * 1000
         
         weather = get_ERA5_data(goes_time)
 
      
-        ps = map_heights_to_pressure(sub_lons, sub_lats, sub_times, sub_heights, weather)
-        #us, vs = get_interpolated_winds(lons, lats, times, heights, ps, weather)
+        ps = map_heights_to_pressure(sub_lons, sub_lats, sub_times,
+                                    sub_heights, weather)
 
         if goes_time < TRANSITION_TIME:
             scan_mode = 3
@@ -794,8 +837,9 @@ def fine_L2_collocation(coarse_df, get_ERA5_data, verbose=False):
         sub_pixel_times = np.sort(pixel_times[ABI_extent[2]:ABI_extent[3],
                                         ABI_extent[0]:ABI_extent[1]].flatten())
 
-        median_idx = len(sub_pixel_times)//2
-        advection_time = pd.Timestamp(sub_pixel_times[median_idx]).to_pydatetime()
+        median_idx = len(sub_pixel_times) // 2
+        advection_time = pd.Timestamp(sub_pixel_times[median_idx]
+                                        ).to_pydatetime()
 
 
         # Do advection
@@ -828,18 +872,19 @@ def fine_L2_collocation(coarse_df, get_ERA5_data, verbose=False):
         
         orthographic_ABI_ids = get_ortho_ids()
 
-        caliop_ids = 5424*(ABIgrid_rows) + ABIgrid_cols
+        caliop_ids = N_ABI_FD_COLS * ABIgrid_rows + ABIgrid_cols
 
         n_matched = len(caliop_ids)
         
         if n_matched > 0:
         
             data["L1_file"].extend(n_matched*[os.path.basename(L2_path)])
-            data["segment_start_lat"].extend( n_matched*[row.segment_start_lat])
+            data["segment_start_lat"].extend(n_matched*[row.segment_start_lat])
             data["segment_end_lat"].extend(n_matched*[row.segment_end_lat])
             data["segment_start_idx"].extend( n_matched*[row.start_profile_id])
-            data["segment_end_idx"].extend( n_matched*[row.end_profile_id])
-            data["profile_id"].extend(list(profile_ids[subset_idx][subindices]))
+            data["segment_end_idx"].extend(n_matched*[row.end_profile_id])
+            data["profile_id"].extend(list(profile_ids[subset_idx][subindices]
+                                            ))
             data["caliop_lon"].extend(list(sub_lons[subindices]))
             data["caliop_lon_adv"].extend(list(adv_lons))
             data["caliop_lat"].extend(list(sub_lats[subindices]))
@@ -853,7 +898,7 @@ def fine_L2_collocation(coarse_df, get_ERA5_data, verbose=False):
             data["goes_ABI_id"].extend(list(caliop_ids))
 
             matched_rows, matched_cols = np.unravel_index(caliop_ids,
-                                                        (5424, 5424))
+                                                (N_ABI_FD_ROWS, N_ABI_FD_ROWS))
             data["goes_ABI_row"].extend(list(matched_rows))
             data["goes_ABI_col"].extend(list(matched_cols))
             data["goes_product"].extend(n_matched*[goes_product])
