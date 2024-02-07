@@ -511,6 +511,13 @@ def geodesic_distance(lon1, lat1, lon2, lat2, globe_params=GRS80_PARAMS,
     geodetic points. This is more accurate than the Haversine distance, which
     assumes a spherical earth.
 
+    Based on:
+    https://github.com/maurycyp/vincenty/blob/master/vincenty/__init__.py
+
+    For more information on the formulae, refer to the original publication by
+    Vicenty:
+    https://www.tandfonline.com/doi/abs/10.1179/sre.1975.23.176.88
+
     Parameters
     ----------
     lon1: float
@@ -536,10 +543,10 @@ def geodesic_distance(lon1, lat1, lon2, lat2, globe_params=GRS80_PARAMS,
 
     a = globe_params["a"]
     b = globe_params["b"]
-    f = (a-b)/a
+    f = (a - b) / a
     
-    U1 = np.arctan((1-f)*np.tan(np.radians(lat1)))
-    U2 = np.arctan((1-f)*np.tan(np.radians(lat2)))
+    U1 = np.arctan((1-f) * np.tan(np.radians(lat1)))
+    U2 = np.arctan((1-f) * np.tan(np.radians(lat2)))
     
     lamda = np.radians(lon2-lon1)
     converged = False
@@ -547,32 +554,34 @@ def geodesic_distance(lon1, lat1, lon2, lat2, globe_params=GRS80_PARAMS,
     
     while not converged and it < max_iter:
 
-        cos_sigma = np.sin(U1)*np.sin(U2) + np.cos(U1) * np.cos(U2) \
+        cos_sigma = np.sin(U1) * np.sin(U2) + np.cos(U1) * np.cos(U2) \
                     * np.cos(lamda)
         sigma = np.arccos(cos_sigma)
         
-        sin_alpha = np.cos(U1)*np.cos(U2)*np.sin(lamda)/np.sin(sigma)
+        sin_alpha = np.cos(U1) * np.cos(U2) * np.sin(lamda) / np.sin(sigma)
         
-        cos_2sigma_m = np.cos(sigma)-2*np.sin(U1)*np.sin(U2)/(1-sin_alpha**2)
-        C = (f/16)*(1-sin_alpha**2) * (4+f*(4-3*(1-sin_alpha**2)))
+        cos_2sigma_m = np.cos(sigma) \
+                            - 2 * np.sin(U1) * np.sin(U2) / (1 - sin_alpha**2)
+        C = (f / 16) * (1 - sin_alpha**2) \
+                * (4 + f * (4 - 3 * (1 - sin_alpha**2)))
         lamda_old = lamda
-        lamda = np.radians(lon2-lon1) + (1-C)*f*sin_alpha*(sigma 
-               + C*np.sin(sigma) * (cos_2sigma_m \
-                + C*np.cos(sigma)*(-1 + 2 * cos_2sigma_m**2)))
+        lamda = np.radians(lon2 - lon1) + (1 - C) * f * sin_alpha * (sigma 
+               + C * np.sin(sigma) * (cos_2sigma_m \
+                + C * np.cos(sigma) * (-1 + 2 * cos_2sigma_m**2)))
         
-        if np.all(np.abs(lamda_old - lamda)/lamda_old < tol):
+        if np.all(np.abs(lamda_old - lamda) / lamda_old < tol):
             converged = True
         it += 1
         
-    u_sq =  (1-sin_alpha**2) * (a**2-b**2)/b**2
-    A = 1 + u_sq/(16384) * ( 4096 + u_sq * (-768 + u_sq * (320 - 175*u_sq)))
-    B = u_sq/1024 * (256 + u_sq *(-128 + u_sq * (74 - 47*u_sq)))
-    dsigma = B*np.sin(sigma)*(cos_2sigma_m \
-                            + (B/4)*(np.cos(sigma)*(-1 + 2*cos_2sigma_m**2))
-                            - (B/6)*cos_2sigma_m *(-3 + 4 * np.sin(sigma)**2)\
-                            * (-3 + 4*cos_2sigma_m**2))
-    s = b*A*(sigma - dsigma)
+    u_sq =  (1 - sin_alpha**2) * (a**2 - b**2) / b**2
+    A = 1 + u_sq / (16384) * (4096 + u_sq * (-768 + u_sq * (320 - 175 * u_sq)))
+    B = u_sq / 1024 * (256 + u_sq *(-128 + u_sq * (74 - 47 * u_sq)))
+    dsigma = B * np.sin(sigma) * (cos_2sigma_m \
+                    + (B / 4) * (np.cos(sigma) * (-1 + 2 * cos_2sigma_m**2))
+                    - (B / 6) * cos_2sigma_m * (-3 + 4 * np.sin(sigma)**2)\
+                    * (-3 + 4 * cos_2sigma_m**2))
     
+    s = b * A * (sigma - dsigma)
     return s 
 
 def great_circle_intermediate_point(lon1, lat1, lon2, lat2, fraction):
@@ -600,12 +609,12 @@ def great_circle_intermediate_point(lon1, lat1, lon2, lat2, fraction):
     """
     
     d = get_angular_distance(lon1, lat1, lon2, lat2)
-    a = np.sin((1-fraction)*d)/np.sin(d)
-    b = np.sin(fraction*d)/np.sin(d)
-    x = a * np.cos(np.radians(lat1))*np.cos(np.radians(lon1)) \
-            + b * np.cos(np.radians(lat2))*np.cos(np.radians(lon2))
-    y = a * np.cos(np.radians(lat1))*np.sin(np.radians(lon1)) \
-            + b * np.cos(np.radians(lat2))*np.sin(np.radians(lon2))
+    a = np.sin((1 - fraction) * d) / np.sin(d)
+    b = np.sin(fraction * d) / np.sin(d)
+    x = a * np.cos(np.radians(lat1)) * np.cos(np.radians(lon1)) \
+            + b * np.cos(np.radians(lat2)) * np.cos(np.radians(lon2))
+    y = a * np.cos(np.radians(lat1)) * np.sin(np.radians(lon1)) \
+            + b * np.cos(np.radians(lat2)) * np.sin(np.radians(lon2))
     z = a * np.sin(np.radians(lat1)) + b * np.sin(np.radians(lat2))
     
     lat_i = np.degrees(np.arctan2(z, np.sqrt(x**2 + y**2)))
