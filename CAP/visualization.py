@@ -9,13 +9,17 @@ import os
 from typing import List
 import math
 
+# Default time locator and formatter settings for class `TimeLocator`
+TIMELOCATOR_STEPS = [1, 2, 5, 10, 15, 30, 300, 600, 900]
+TIMELOCATOR_MINORSTEPS = [0.2, 0.5, 1, 2, 3, 5, 10, 60, 120, 300]
 
 class TimeLocator(mpl.ticker.Locator):
     """
     Source: https://github.com/peterkuma/ccplot/blob/master/bin/ccplot
     """
-    def __init__(self, n: int, time: List[dt.datetime], steps: List[int]=[1, 2, 5, 10, 15, 30, 300, 600, 900],
-                 minorsteps: List[float]=[0.2, 0.5, 1, 2, 3, 5, 10, 60, 120, 300]):
+    def __init__(self, n: int, time: List[dt.datetime],
+                steps: List[int]=TIMELOCATOR_STEPS,
+                 minorsteps: List[float]=TIMELOCATOR_MINORSTEPS):
         
         self.n = int(n)
         self.time = time
@@ -31,7 +35,8 @@ class TimeLocator(mpl.ticker.Locator):
         
         # Time difference
         time_diff = self.time[vmax] - self.time[vmin]
-        second_diff = time_diff.days*3600*24 + time_diff.seconds + time_diff.microseconds*10e-6
+        second_diff = time_diff.days*3600*24 + time_diff.seconds \
+                        + time_diff.microseconds*10e-6
         if second_diff < 0:
             second_diff *= -1
         
@@ -50,7 +55,8 @@ class TimeLocator(mpl.ticker.Locator):
         minorbase = ratio*self.minorsteps[i]
         
         offset = offset % base
-        self.minorlocs = np.arange(vmin + offset - base, vmax + offset + base, minorbase)
+        self.minorlocs = np.arange(vmin + offset - base, vmax + offset + base,
+                            minorbase)
         return np.arange(vmin + offset, vmax + offset, base)
         
         
@@ -167,7 +173,7 @@ def loadcolormap(filename, name):
         filename    -- name of the colormap file
         name        -- name for the matplotlib colormap object
     Returns:
-        A tuple of: instance of ListedColormap, instance of BoundaryNorm, ticks.
+        A tuple of: instance of ListedColormap, instance of BoundaryNorm, ticks
     """
     CCPLOT_CMAP_PATH = ""
 
@@ -206,7 +212,8 @@ def loadcolormap(filename, name):
                 raise ValueError("Invalid number of fields")
 
             if mode == "BOUNDS":
-                bounds += list(np.arange(float(a[0]), float(a[1]), float(a[2])))
+                bounds += list(np.arange(float(a[0]), float(a[1]),
+                                float(a[2])))
             elif mode == "TICKS":
                 ticks += list(np.arange(float(a[0]), float(a[1]), float(a[2])))
             elif mode == "COLORS":
@@ -299,12 +306,9 @@ def setup_lonlat_axes(fig, axes, lon, lat, axis="x"):
         for line in llaxes.yaxis.get_ticklines():
             line.set_marker(mpl.lines.TICKRIGHT)
 
-#         for label in llaxes.yaxis.get_ticklabels():
-#             label.set_x(label.get_position()[1] - 0.005)
-
         llaxes.yaxis.set_major_formatter(lonlat_formatter)
 
-    
+
 class CopyLocator(mpl.ticker.Locator):
     """
     Source: https://github.com/peterkuma/ccplot/blob/master/bin/ccplot
@@ -328,15 +332,17 @@ class SciFormatter(mpl.ticker.Formatter):
         else: return "%.1f" % (x,)
 
 
-def plot_caliop_profile_direct(fig, ax, lons, lats, times, data, min_alt=0.0, max_alt=40.0,
-                                 colorbar=False, dist_axis=False, rotate=False,
-                                 add_scalebar=False, **kwargs):
+def plot_caliop_profile_direct(fig, ax, lons, lats, times, data, min_alt=0.0,
+                                max_alt=40.0,
+                                colorbar=False, dist_axis=False, rotate=False,
+                                add_scalebar=False, **kwargs):
    
 
     if kwargs.get("cmap", None) is None: 
 
-        cmap, norm, ticks = loadcolormap(os.path.dirname(os.path.realpath(__file__))
-                                        + "/assets/calipso-backscatter.cmap", "idk")
+        cmap_path = os.path.join(os.path.dirname(__file__),
+                    "assets/calipso-backscatter.cmap")
+        cmap, norm, ticks = loadcolormap(cmap_path, "CALIOP")
     else:
         cmap = kwargs.get("cmap")
         norm = kwargs.get("norm")
@@ -355,9 +361,6 @@ def plot_caliop_profile_direct(fig, ax, lons, lats, times, data, min_alt=0.0, ma
         nseconds = diff.days*24*3600 + diff.seconds
         
         x, y, width, height = get_axes_bounds(fig, ax) 
-    #     width = height/(14.0/(nseconds*7)*(ve2-ve1)*0.001)
-
-    #     expand_axes(fig, ax, width, height, padding=0.0)
         figw, figh = fig.get_size_inches()
         
         # Configure time axis
@@ -370,8 +373,7 @@ def plot_caliop_profile_direct(fig, ax, lons, lats, times, data, min_alt=0.0, ma
         for label in ax.yaxis.get_ticklabels():
             label.set_x(-0.05/figw)
             label.set_rotation("horizontal")
-        # for line in ax.yaxis.get_ticklines() + ax.yaxis.get_minorticklines():
-        #     line.set_marker(mpl.lines.TICKLEFT)
+
         ax.yaxis.get_label().set_rotation('vertical')
         
         
@@ -383,8 +385,10 @@ def plot_caliop_profile_direct(fig, ax, lons, lats, times, data, min_alt=0.0, ma
         height_per_tick = (ve2-ve1)/(height/(12*2/72.0))
         
         i = np.argmin(np.abs(majorticksbases - height_per_tick))
-        ax.xaxis.set_minor_locator(mpl.ticker.MultipleLocator(minorticksbases[i]))
-        ax.xaxis.set_major_locator(mpl.ticker.MultipleLocator(majorticksbases[i]))
+        minor_locator = mpl.ticker.MultipleLocator(minorticksbases[i])
+        major_locator = mpl.ticker.MultipleLocator(majorticksbases[i])
+        ax.xaxis.set_minor_locator(minor_locator)
+        ax.xaxis.set_major_locator(major_locator)
 
         for label in ax.xaxis.get_ticklabels():
             label.set_y(-0.05/figh)
@@ -419,10 +423,11 @@ def plot_caliop_profile_direct(fig, ax, lons, lats, times, data, min_alt=0.0, ma
 
         if add_scalebar:         
             ## Add size bar
-            ax.add_patch(patches.Rectangle([14.0, 0], height=100+2*33.3, width=1.0, facecolor="w"))
+            ax.add_patch(patches.Rectangle([14.0, 0], height=100+2*33.3,
+                                            width=1.0, facecolor="w"))
             ax.plot([14.3, 14.3], [50, 50+2*33.3], c="k")
-            ax.text(14.3, 50+33.3, "20 km", ha="right", va="center", rotation=90, c="k",
-                    fontsize=6)
+            ax.text(14.3, 50+33.3, "20 km", ha="right", va="center",
+                    rotation=90, c="k", fontsize=6)
         
     else:
         im = ax.imshow(data, cmap=cmap, norm=norm,
@@ -435,9 +440,6 @@ def plot_caliop_profile_direct(fig, ax, lons, lats, times, data, min_alt=0.0, ma
         nseconds = diff.days*24*3600 + diff.seconds
         
         x, y, width, height = get_axes_bounds(fig, ax) 
-    #     width = height/(14.0/(nseconds*7)*(ve2-ve1)*0.001)
-
-    #     expand_axes(fig, ax, width, height, padding=0.0)
         figw, figh = fig.get_size_inches()
         
         # Configure time axis
@@ -460,8 +462,10 @@ def plot_caliop_profile_direct(fig, ax, lons, lats, times, data, min_alt=0.0, ma
         height_per_tick = (ve2-ve1)/(height/(12*2/72.0))
         
         i = np.argmin(np.abs(majorticksbases - height_per_tick))
-        ax.yaxis.set_minor_locator(mpl.ticker.MultipleLocator(minorticksbases[i]))
-        ax.yaxis.set_major_locator(mpl.ticker.MultipleLocator(majorticksbases[i]))
+        minor_locator = mpl.ticker.MultipleLocator(minorticksbases[i])
+        major_locator = mpl.ticker.MultipleLocator(majorticksbases[i])
+        ax.yaxis.set_minor_locator(minor_locator)
+        ax.yaxis.set_major_locator(major_locator)
 
         for label in ax.yaxis.get_ticklabels():
             label.set_x(-0.05/figw)
@@ -502,10 +506,11 @@ def plot_caliop_profile_direct(fig, ax, lons, lats, times, data, min_alt=0.0, ma
 
         if add_scalebar:
             # Add scalebar if requested
-            ax.add_patch(patches.Rectangle([0, 14.5], width=100+2*33.3, height=0.5, facecolor="w"))
+            ax.add_patch(patches.Rectangle([0, 14.5], width=100+2*33.3,
+                                            height=0.5, facecolor="w"))
             ax.plot([50, 50+2*33.3], [14.7, 14.7], c="k")
-            ax.text(50+33.3, 14.7, "20 km", ha="center", va="bottom", rotation=0, c="k",
-                    fontsize=6)
+            ax.text(50+33.3, 14.7, "20 km", ha="center", va="bottom",
+                        rotation=0, c="k", fontsize=6)
     
 
 def setup_dist_axes(fig, axes, times, axis="x"):
@@ -533,17 +538,7 @@ def setup_dist_axes(fig, axes, times, axis="x"):
         llaxes.xaxis.set_label_position("bottom")
         llaxes.spines.bottom.set_position(('axes', -0.15))
 
-
         llaxes.set(xlabel="Distance, km")
-
-
-        # for tick in llaxes.xaxis.get_major_ticks():
-        #     tick.tick1line.set_visible(False)
-        #     tick.label1.set_visible(False)
-        #     tick.tick2line.set_visible(True)
-        #     tick.label2.set_visible(True)
-
-
         llaxes.xaxis.set_major_formatter(dist_formatter)
     else:
         llaxes = axes.twinx()
@@ -579,5 +574,3 @@ def rotate_all_labels(axes):
             
         ax.xaxis.get_label().set_rotation('vertical')
         ax.yaxis.get_label().set_rotation('vertical')
-
-
