@@ -71,7 +71,11 @@ TRANSITION_TIME = dt.datetime(2019, 4, 2)
 # TIME_OFFSET_CHANNEL_16]
 GOES16_BAND_OFFSETS = [0.179, -0.055, 0.402, 0.642, -0.359, -0.642,	0.535,
             0.267, 0.000, -0.267, -0.535, -0.542, 0.551, 0.319, -0.256, 0.579]
-                
+            
+# These are the CONUS product rows at which a new GOES-16 ABI swath
+# begins, as modeled in the Carr et al. (2020) pixel time estimates.
+# you can find these by using the .nc files in `assets`.
+SWATH_BOUNDARIES = np.array([0, 230, 484, 738, 992, 1246])
 
 def ABI2geodetic(x, y, nc=None):
     """
@@ -505,12 +509,11 @@ def find_closest_ABI_product(caliop_time, ABI_FD_row, ABI_FD_col):
         return closest_product, start_time
 
 
-def label_scan_rows(lons, lats, boundaries=np.array([0, 229, 483, 737, 991, 1245]), conus_first_row=422,
-                   conus_first_col=902):
+def label_scan_rows(lons, lats, boundaries=SWATH_BOUNDARIES):
     """
-    The orthographic projection used for the Meijer et al. (2022) contrail detections
-    is covered by 6 ABI "scan rows". This function finds the scan row of each
-    input coordinate.
+    The orthographic projection used for the Meijer et al. (2022) contrail
+    detections is covered by 6 ABI "scan rows", or "swaths". 
+    This function finds the scan row of each input coordinate.
 
     Parameters
     ----------
@@ -519,23 +522,27 @@ def label_scan_rows(lons, lats, boundaries=np.array([0, 229, 483, 737, 991, 1245
     lats : np.array
         Latitude, degrees
     boundaries : np.array (optional)
-        The ABI fixed-grid rows of the scan row boundaries
-    conus_first_row : int (optional)
-        The first row of the ABI conus product (w.r.t the Full disk fixed-grid)
-    conus_first_col : int (optional)
-        The first column of the ABI conus product (w.r.t the Full disk fixed-grid)
-    
+        The CONUS product rows at which a new scan swath starts
+
     Returns
     -------
     scan_rows : np.array
-        The identified scan rows
+        The identified scan rows / swaths
     """
+    # Map longitudes and latitudes to ABI grid locations
     x_caliop, y_caliop = geodetic2ABI(lons, lats)
     rows, cols = get_ABI_grid_locations(x_caliop,y_caliop)
-    rows -= conus_first_row
-    cols -= conus_first_col
 
-    scan_rows = np.argmin(np.maximum(rows[:,np.newaxis] - boundaries[np.newaxis,:],
-                          -10e3*(rows[:,np.newaxis] - boundaries[np.newaxis,:])), axis=1)
+    # The boundaries are determined w.r.t the CONUS product "origin".
+    rows -= CONUS_FIRST_ROW
+    cols -= CONUS_FIRST_COL
+
+    # Find the scan row of each coordinate
+    scan_rows = np.argmin(rows[:,np.newaxis] \
+                            - boundaries[np.newaxis,:] >= 0, axis=1) - 1
+
+    # Clip "out of domain" values to the first and last scan rows
+    scan_rows[scan_rows >= np.max(boundaries)] = len(boundaries) - 1
+    scan_rows[scan_rows < 0] = 0
     
     return scan_rows
