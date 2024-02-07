@@ -1,15 +1,15 @@
 """
-Source: https://github.com/ErickShepherd/modis_caliop_anomaly_analysis/blob/master/cloud_3d_effects/vertical_feature_mask.py
+Based on file of the same name in:
+https://github.com/ErickShepherd/modis_caliop_anomaly_analysis/
 
-Vincent R. Meijer (27/08/2020):
-    Switched around keys of aerosol and cloud categories in
-    FEATURE_SUBTYPE dictionary
+I have switched around keys of aerosol and cloud categories in the
+FEATURE_SUBTYPE dictionary, as I believe these were incorrect in the original
+file.
 """
-# Third party imports.
+import itertools
+
 import numpy as np
 import pandas as pd
-
-import itertools
 
 # Constant definitions.
 VFM_INTEGER_SIZE = 16
