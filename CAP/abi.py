@@ -6,7 +6,17 @@ from .constants import GRS80_PARAMS
 from .utils import floor_time, get_numpy_asset, get_netcdf_asset, get_ortho_ids
 
 
-GOES16_PARAMS = {"h": 35786.0234375*1000., "lon_0": -75.2}
+# Nominal satellite height `h` in meters, above GRS80 ellipsoid
+# Obtained from page 46 in 
+# https://www.goes-r.gov/users/docs/PUG-L1b-vol3.pdf
+# `lon_0` is the GOES-16 sub-satellite point longitude, see page 18
+# in the same reference.
+# Note that this is different than the value for the central longitude
+# used in the grid projection (-75.2 versus -75.0).
+# Here we use -75.2 as this is used for parallax correction and corresponds
+# to the physical position of the satellite.
+GOES16_PARAMS = {"h": 35786.023 * 1000.,
+                 "lon_0": -75.2}
 
 # Location of the CONUS product upper left corner in the Full Disk ABI grid
 # Obtained from page 26 in 
