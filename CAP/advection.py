@@ -7,7 +7,7 @@ from .interpolation import interpolate_4d
 
 def interpolate_winds(lon, lat, pressure, time,
         u, v, longitudes, latitudes,
-        pressures_k, times)
+        pressures_k, times):
     """
     Interpolate horizontal winds in a 4 dimensional wind field.
 
