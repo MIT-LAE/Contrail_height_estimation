@@ -81,4 +81,18 @@ dependencies:
   - zstd=1.5.5=hc292b87_0
   - pip:
       - cap==0.0.1
+      - cython==3.0.8
+      - exceptiongroup==1.2.0
+      - imageio==2.33.1
+      - iniconfig==2.0.0
+      - lazy-loader==0.3
+      - networkx==3.2.1
+      - pluggy==1.4.0
+      - pyhdf==0.11.3
+      - pytest==8.0.0
+      - scikit-image==0.22.0
+      - scipy==1.12.0
+      - tifffile==2024.1.30
+      - tomli==2.0.1
+      - xarray==2024.1.1
 prefix: /home/vmeijer/.conda/envs/contrail-altitude-estimation
