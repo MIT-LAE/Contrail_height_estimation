@@ -1,8 +1,9 @@
-import numpy as np
-from scipy.optimize import bisect, newton
 import os
 
-from contrails.satellites.goes.abi import *
+import numpy as np
+from scipy.optimize import bisect, newton
+
+
 
 GRS80_PARAMS = {"b": 6356752.314140347, "a": 6378137.}
 GOES16_PARAMS= {"h": 35786.0234375*1000., "lon_0": -75.2}
@@ -63,7 +64,8 @@ class GroundTrack:
             
             # Find index of end position of segment
             idx = np.argmin(np.abs(self.lats-approx_lat))
-            self.segments.append(GreatCirclePath(lon0, lat0, self.lons[idx], self.lats[idx]))
+            self.segments.append(GreatCirclePath(lon0, lat0, 
+                                    self.lons[idx], self.lats[idx]))
         
         # Final segment
         self.segments.append(GreatCirclePath(self.lons[idx], self.lats[idx],
@@ -93,7 +95,8 @@ class GroundTrack:
         points = []
 
         for i in range(self.n_segments):
-            points.append(self.segments[i].get_coordinates(n_points=points_per_segment))
+            coords = self.segments[i].get_coordinates(n_points=points_per_segment)
+            points.append(coords)
 
         stacked = np.hstack(points)
         return stacked[0,:], stacked[1,:]
@@ -206,7 +209,8 @@ class GreatCirclePath:
             Latitudes, degrees
         """
         t = np.linspace(0, 1, n_points)
-        return great_circle_intermediate_point(self.lon0, self.lat0, self.lon1, self.lat1, t)
+        return great_circle_intermediate_point(self.lon0, self.lat0,
+                                                    self.lon1, self.lat1, t)
         
 
 def ECEF2geodetic(x):
@@ -252,15 +256,17 @@ def get_bearing(lon0, lat0, lon1, lat1):
         Bearing in degrees
     """ 
     a1 = np.sin(np.radians(lon1-lon0))*np.cos(np.radians(lat1))
-    a2 = np.cos(np.radians(lat0))*np.sin(np.radians(lat1)) - np.sin(np.radians(lat0))\
-        *np.cos(np.radians(lat1))*np.cos(np.radians(lon1-lon0))
+    a2 = np.cos(np.radians(lat0))*np.sin(np.radians(lat1)) \
+            - np.sin(np.radians(lat0))*np.cos(np.radians(lat1))\
+            * np.cos(np.radians(lon1-lon0))
     
     return np.degrees(np.arctan2(a1, a2))
 
 
 def get_haversine(lon0, lat0, lon1, lat1):
     """
-    Computes length of greatcircle path extending from (lon0, lat0) to (lon1, lat1).
+    Computes length of great circle path extending from (lon0, lat0) to
+    (lon1, lat1).
     
     Parameters
     ----------
@@ -283,8 +289,8 @@ def get_haversine(lon0, lat0, lon1, lat1):
         
 def get_angular_distance(lon0, lat0, lon1, lat1):
     """
-    Computes central angle between great circle path extending from (lon0, lat0)
-    to (lon1, lat1).
+    Computes central angle between great circle path extending from
+    (lon0, lat0) to (lon1, lat1).
     
     Parameters
     ----------
@@ -311,7 +317,7 @@ def get_angular_distance(lon0, lat0, lon1, lat1):
 
 
 def parallax_correction_vicente_forward(lon, lat, h,
-                            globe_params=GRS80_PARAMS, sat_params=GOES16_PARAMS):
+                        globe_params=GRS80_PARAMS, sat_params=GOES16_PARAMS):
     """
     Implements the parallax correction method by Vicente et al. (2002) as
     described in Bielinski (2020). 
@@ -347,7 +353,7 @@ def parallax_correction_vicente_forward(lon, lat, h,
     
     
     R_equivalent = R_eq/np.sqrt(np.cos(np.radians(lat))**2 \
-                                + (R_eq**2/R_pol**2)*np.sin(np.radians(lat))**2)
+                            + (R_eq**2/R_pol**2)*np.sin(np.radians(lat))**2)
     
     # geocentric latitude
     glat = np.degrees(np.arctan((1-e**2)*np.tan(np.radians(lat))))
@@ -371,13 +377,16 @@ def parallax_correction_vicente_forward(lon, lat, h,
     # Solve equation
     if isinstance(lat, float):
         # Determine equation to be solved
-        f = lambda c: (((Xc+c*Xcs)**2 + (Yc+c*Ycs)**2)/(R_eq + h)**2) + ((Zc + c*Zcs)**2/(R_pol +h)**2) - 1
+        f = lambda c: (((Xc+c*Xcs)**2 + (Yc+c*Ycs)**2)/(R_eq + h)**2) \
+                + ((Zc + c*Zcs)**2/(R_pol +h)**2) - 1
         c = bisect(f, 0, 1)
     else:
         c = np.zeros_like(lat)
         for i in range(c.size):
             # Determine equation to be solved
-            f = lambda c: (((Xc[i]+c*Xcs[i])**2 + (Yc[i]+c*Ycs[i])**2)/(R_eq + h[i])**2) + ((Zc[i] + c*Zcs[i])**2/(R_pol +h[i])**2) - 1
+            f = lambda c: (((Xc[i]+c*Xcs[i])**2 \
+                + (Yc[i]+c*Ycs[i])**2)/(R_eq + h[i])**2) \
+                + ((Zc[i] + c*Zcs[i])**2/(R_pol +h[i])**2) - 1
             try:
                 c[i] = bisect(f, 0, 1)
             except ValueError:
@@ -391,20 +400,21 @@ def parallax_correction_vicente_forward(lon, lat, h,
     Zt = Zc + c*Zcs
 
     # Convert to geodetic
-    lat_correct = np.degrees(np.arctan(((R_eq)**2/(R_pol)**2) * Zt/(np.sqrt(Xt**2 + Yt**2)) ) )
+    lat_correct = np.degrees(np.arctan(((R_eq)**2/(R_pol)**2) \
+                        * Zt/(np.sqrt(Xt**2 + Yt**2)) ) )
     lon_correct = np.degrees(np.arctan(Yt/Xt)) + sat_lon
     
     return lon_correct, lat_correct
 
 
-def parallax_correction_vicente_backward(lon, lat, h, globe_params=GRS80_PARAMS,
-                                                     sat_params=GOES16_PARAMS):
+def parallax_correction_vicente_backward(lon, lat, h, 
+                        globe_params=GRS80_PARAMS, sat_params=GOES16_PARAMS):
     """
-    Implements the inverse of the parallax correction method by Vicente et al. (2002) as
-    described in Bielinski (2020). 
+    Implements the inverse of the parallax correction method by Vicente et al.
+    (2002) as described in Bielinski (2020). 
 
-    That is, given a geodetic position and height, where would a given satellite 
-    'view' the object?
+    That is, given a geodetic position and height, where would a given
+    satellite  'view' the object?
 
     Parameters
     ----------
@@ -437,7 +447,7 @@ def parallax_correction_vicente_backward(lon, lat, h, globe_params=GRS80_PARAMS,
     e = np.sqrt(R_eq**2-R_pol**2)/R_eq
     
     R_equivalent = (R_eq+h)/np.sqrt(np.cos(np.radians(lat))**2 \
-                                + ((R_eq+h)**2/(R_pol+h)**2)*np.sin(np.radians(lat))**2)
+                    + ((R_eq+h)**2/(R_pol+h)**2)*np.sin(np.radians(lat))**2)
     
     glat = np.degrees(np.arctan((1-e**2)*np.tan(np.radians(lat))))
     # Cloud position
@@ -458,8 +468,10 @@ def parallax_correction_vicente_backward(lon, lat, h, globe_params=GRS80_PARAMS,
     # Solve equation
     if isinstance(lat, float) or isinstance(lat,int):
         # Determine equation to be solved
-        f = lambda c: ((Xt+c*Xts)**2 + (Yt+c*Yts)**2)/(R_eq**2) + ((Zt + c*Zts)**2/(R_pol**2)) - 1
-        f_prime = lambda c: 2*(Xts*(Xt+c*Xts)+Yts*(Yt+c*Yts))/R_eq**2 + 2*Zts*(Zt+c*Zts)/R_pol**2 
+        f = lambda c: ((Xt+c*Xts)**2 + (Yt+c*Yts)**2)/(R_eq**2) \
+                                + ((Zt + c*Zts)**2/(R_pol**2)) - 1
+        f_prime = lambda c: 2*(Xts*(Xt+c*Xts)+Yts*(Yt+c*Yts))/R_eq**2 \
+                        + 2*Zts*(Zt+c*Zts)/R_pol**2 
         
         c = newton(f, -1, fprime=f_prime)
     else:
@@ -467,13 +479,18 @@ def parallax_correction_vicente_backward(lon, lat, h, globe_params=GRS80_PARAMS,
         for i in range(c.size):
 
             # Determine equation to be solved                                    
-            f = lambda c: ( ((Xt[i]+c*Xts[i])**2 + (Yt[i]+c*Yts[i])**2)/(R_eq**2)) + ((Zt[i] + c*Zts[i])**2/(R_pol**2)) - 1
-            f_prime = lambda c: 2*(Xts[i]*(Xt[i]+c*Xts[i])+Yts[i]*(Yt[i]+c*Yts[i]))/R_eq**2 + 2*Zts[i]*(Zt[i]+c*Zts[i])/R_pol**2 
+            f = lambda c: ( ((Xt[i]+c*Xts[i])**2 \
+                            + (Yt[i]+c*Yts[i])**2)/(R_eq**2)) \
+                            + ((Zt[i] + c*Zts[i])**2/(R_pol**2)) - 1
+            f_prime = lambda c: 2*(Xts[i]*(Xt[i]+c*Xts[i])\
+                + Yts[i]*(Yt[i]+c*Yts[i]))/R_eq**2 \
+                    + 2*Zts[i]*(Zt[i]+c*Zts[i])/R_pol**2 
             try:
                 c[i] = newton(f, -1, fprime=f_prime)
             except (ValueError, RuntimeError):
                 print("Backward parallax correction failed")
-                print(f"longitude: {lon[i]}, latitude: {lat[i]}, height: {h[i]}")
+                print(f"longitude: {lon[i]}, latitude: {lat[i]}," \
+                        + f" height: {h[i]}")
                 print(f"F(-1): {f(-1)}, F(0): {f(0)}")
                 raise ValueError
                 
@@ -484,7 +501,8 @@ def parallax_correction_vicente_backward(lon, lat, h, globe_params=GRS80_PARAMS,
     Zc = Zt + c*Zts
 
     # Convert to geodetic
-    lat_correct = np.degrees(np.arctan( (R_eq**2/(R_pol**2) * Zt/(np.sqrt(Xc**2 + Yc**2)) ) ))
+    lat_correct = np.degrees(np.arctan( (R_eq**2/(R_pol**2) \
+                                * Zt/(np.sqrt(Xc**2 + Yc**2)) )))
     lon_correct = np.degrees(np.arctan(Yc/Xc)) + sat_lon
     
     return lon_correct, lat_correct
@@ -533,7 +551,8 @@ def geodesic_distance(lon1, lat1, lon2, lat2, globe_params=GRS80_PARAMS,
     
     while not converged and it < max_iter:
 
-        cos_sigma = np.sin(U1)*np.sin(U2) + np.cos(U1) * np.cos(U2) * np.cos(lamda)
+        cos_sigma = np.sin(U1)*np.sin(U2) + np.cos(U1) * np.cos(U2) \
+                    * np.cos(lamda)
         sigma = np.arccos(cos_sigma)
         
         sin_alpha = np.cos(U1)*np.cos(U2)*np.sin(lamda)/np.sin(sigma)
@@ -541,8 +560,9 @@ def geodesic_distance(lon1, lat1, lon2, lat2, globe_params=GRS80_PARAMS,
         cos_2sigma_m = np.cos(sigma)-2*np.sin(U1)*np.sin(U2)/(1-sin_alpha**2)
         C = (f/16)*(1-sin_alpha**2) * (4+f*(4-3*(1-sin_alpha**2)))
         lamda_old = lamda
-        lamda = np.radians(lon2-lon1) + (1-C)*f*sin_alpha*(sigma \
-               + C*np.sin(sigma) * (cos_2sigma_m + C*np.cos(sigma)*(-1 + 2 * cos_2sigma_m**2)))
+        lamda = np.radians(lon2-lon1) + (1-C)*f*sin_alpha*(sigma 
+               + C*np.sin(sigma) * (cos_2sigma_m \
+                + C*np.cos(sigma)*(-1 + 2 * cos_2sigma_m**2)))
         
         if np.all(np.abs(lamda_old - lamda)/lamda_old < tol):
             converged = True
@@ -551,9 +571,11 @@ def geodesic_distance(lon1, lat1, lon2, lat2, globe_params=GRS80_PARAMS,
     u_sq =  (1-sin_alpha**2) * (a**2-b**2)/b**2
     A = 1 + u_sq/(16384) * ( 4096 + u_sq * (-768 + u_sq * (320 - 175*u_sq)))
     B = u_sq/1024 * (256 + u_sq *(-128 + u_sq * (74 - 47*u_sq)))
-    dsigma = B*np.sin(sigma)*(cos_2sigma_m + (B/4)*(np.cos(sigma)*(-1 + 2*cos_2sigma_m**2))
-                             - (B/6)*cos_2sigma_m *(-3 + 4 * np.sin(sigma)**2)*(-3 + 4*cos_2sigma_m**2))
-    s = b*A*(sigma-dsigma)
+    dsigma = B*np.sin(sigma)*(cos_2sigma_m \
+                            + (B/4)*(np.cos(sigma)*(-1 + 2*cos_2sigma_m**2))
+                            - (B/6)*cos_2sigma_m *(-3 + 4 * np.sin(sigma)**2)\
+                            * (-3 + 4*cos_2sigma_m**2))
+    s = b*A*(sigma - dsigma)
     
     return s 
 
