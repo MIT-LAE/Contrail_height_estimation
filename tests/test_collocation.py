@@ -1,7 +1,9 @@
 import numpy as np
-from CAP.collocation import *
+import xarray as xr
+import datetime as dt
 import pytest
-import xarray as xr, datetime as dt
+
+from CAP.collocation import geometricaltitude2pressure
 
 
 def test_geometricaltitude2pressure():

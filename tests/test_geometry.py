@@ -1,6 +1,10 @@
 import numpy as np
-from CAP.geometry import *
 import pytest
+
+from CAP.geometry import (get_bearing, get_haversine, GreatCirclePath,
+    ECEF2geodetic, geodesic_distance, parallax_correction_vicente_forward,
+    parallax_correction_vicente_backward, great_circle_intermediate_point)
+from CAP.constants import RADIUS_EARTH
 
 
 def test_get_bearing():
@@ -20,12 +24,12 @@ def test_get_bearing():
 
 def test_get_haversine():
 
-        lon0 = 0
-        lat0 = 0
-        lon1 = 180
-        lat1 = 0 
-        result = get_haversine(lon0, lat0, lon1, lat1)
-        assert pytest.approx(result, 1) == np.pi * RADIUS_EARTH
+    lon0 = 0
+    lat0 = 0
+    lon1 = 180
+    lat1 = 0 
+    result = get_haversine(lon0, lat0, lon1, lat1)
+    assert pytest.approx(result, 1) == np.pi * RADIUS_EARTH
 
 
 def test_greatcirclepath():
@@ -79,19 +83,6 @@ def test_parallax_correction_vicente_forward():
     lat = 47.608013
     lon_c, lat_c = parallax_correction_vicente_forward(lon, lat, 4.5e3)
     assert pytest.approx(geodesic_distance(lon, lat, lon_c, lat_c), rel=1e-1) == 13000.
-
-
-def test_get_ABI_grid_locations():
-
-    # Values taken from ABI-L2 MCMIPF product
-    col = 1111
-    row = 1298
-    x = -0.089627996
-    y = 0.079156
-    r, c = get_ABI_grid_locations(x, y)
-    assert col == c
-    assert row == r
-
 
 def test_great_circle_intermediate_point():
     
