@@ -3,12 +3,8 @@ import os
 import numpy as np
 from scipy.optimize import bisect, newton
 
-
-
-GRS80_PARAMS = {"b": 6356752.314140347, "a": 6378137.}
-GOES16_PARAMS= {"h": 35786.0234375*1000., "lon_0": -75.2}
-RADIUS_EARTH = 6378. # km
-
+from .abi import GOES16_params
+from .constants import GRS80_PARAMS, RADIUS_EARTH
 
 class GroundTrack:
     """

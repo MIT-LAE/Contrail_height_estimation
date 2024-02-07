@@ -4,6 +4,10 @@ import cartopy.crs as ccrs
 
 from .utils import *
 
+
+
+GOES16_PARAMS= {"h": 35786.0234375*1000., "lon_0": -75.2}
+
 # location of the CONUS upper left corner in the Full disk ABI grid
 CONUS_FIRST_COL = 902
 CONUS_FIRST_ROW = 422
