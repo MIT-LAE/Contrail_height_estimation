@@ -22,6 +22,9 @@ def interp2d_12(np.ndarray[float, ndim=2, mode="c"] data not None,
     of data points along the first and second axis, resp.
     data, X and Z are expected to be C-contiguous float32 numpy arrays
     with no mask and no transformation (such as transposition) applied.
+
+    Source: 
+        https://github.com/peterkuma/ccplot/blob/master/ccplot/algorithms.pyx
     """
     cdef int i, j, n, m
     cdef float n1, n2
