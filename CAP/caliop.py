@@ -8,7 +8,7 @@ import skimage.measure
 
 from .geometry import GroundTrack
 from .vertical_feature_mask import interpret_vfm
-from .visualization import *
+from .visualization import plot_caliop_profile_direct
 
 from .interpolation import interp2d_12
 
