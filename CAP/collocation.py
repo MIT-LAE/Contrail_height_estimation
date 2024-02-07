@@ -48,7 +48,7 @@ COLUMNS = ["Layer_Top_Altitude", "Layer_Base_Altitude",
             "Ice_Water_Path_Uncertainty", "Snow_Ice_Surface_Type"]
 
 def apply_cloud_filter(b532, b1064, 
-            backscatter_threshold=BACKSCATTER_THRESHOLD
+            backscatter_threshold=BACKSCATTER_THRESHOLD,
             width_threshold=WIDTH_THRESHOLD, 
             thickness_threshold=THICKNESS_THRESHOLD, area_threshold=10):
     """

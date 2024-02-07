@@ -60,7 +60,7 @@ def interpolate_winds(lon, lat, pressure, time,
     pressures = pressures_k[k:k+3]
 
     # Time difference in seconds
-    Dt = np.float64((np.datetime64(time,'ns') - times[l]) \ 
+    Dt = np.float64((np.datetime64(time,'ns') - times[l]) \
                             / np.timedelta64(1,'s') /3600.)
 
     # Reverse order of latitudes for interpolation

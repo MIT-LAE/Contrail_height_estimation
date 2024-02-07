@@ -188,7 +188,7 @@ class GreatCirclePath:
         
         angular_distance = get_angular_distance(self.lon0, self.lat0, lon, lat)
         
-        dist = np.arcsin(np.sin(angular_distance) \ 
+        dist = np.arcsin(np.sin(angular_distance) \
                 * np.sin(bearing_start_third-bearing_start_end)) * RADIUS_EARTH
         return dist
     

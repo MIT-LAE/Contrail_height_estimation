@@ -336,7 +336,7 @@ def get_scan_start_time(goes_time, scan_mode, product):
     
     # Scan mode 3 corresponds to 1 Full disk product every 15 minutes
     if scan_mode == 3:
-        product_time = floor_time(g oes_time, minute_res=15)
+        product_time = floor_time(goes_time, minute_res=15)
         if "CONUS" in product:
             
             conus_n = int(product[-1])
