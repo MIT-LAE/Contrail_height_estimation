@@ -1,5 +1,6 @@
 import os
-import numpy as np, datetime as dt
+import numpy as np
+import datetime as dt
 import xarray as xr
 
 
@@ -141,3 +142,33 @@ def get_image_tile_indices(rows, cols, region_size, image_shape):
     reg_cols[:,right_margins < 0] += right_margins[right_margins < 0]
     
     return reg_rows, reg_cols
+
+    
+def round_time(t, minute_res=10):
+    """
+    Round the time to the nearest 'minute_res' interval
+    """
+    minutes = int(np.round(t.minute/minute_res)*minute_res) % 60
+    
+    # Round to next hour if this is the case
+    if minutes == 0 and t.minute > (60 - minute_res / 2):
+        return dt.datetime(t.year, t.month, t.day, t.hour+1, minutes)
+    else:
+        return dt.datetime(t.year, t.month, t.day, t.hour, minutes)
+    
+
+def round_conus_time(t):
+    """
+    Round the time to the nearest 5 minute interval
+    """
+    return round_time(t, minute_res=5)
+
+
+def floor_time(t, minute_res=10):
+    """
+    Floor the time to the nearest 'minute_res' interval
+    """
+    minutes = int(np.floor(t.minute / minute_res) * minute_res) % 60
+    
+    return dt.datetime(t.year, t.month, t.day, t.hour, minutes)
+  

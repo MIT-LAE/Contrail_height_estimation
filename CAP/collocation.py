@@ -14,7 +14,8 @@ from .advection import get_interpolated_winds, get_advected_positions
 from .abi import (get_ABI_grid_locations, geodetic2ABI, CONUS_FIRST_COL,
                 CONUS_FIRST_ROW, get_scan_start_time, get_pixel_times,
                 map_geodetic_extent_to_ABI, TRANSITION_TIME)
-from .utils import (get_lons, get_lats, get_ortho_ids, get_netcdf_asset)
+from .utils import (get_lons, get_lats, get_ortho_ids, get_netcdf_asset,
+                    floor_time, round_conus_time)
 from .vertical_feature_mask import get_cirrus_fcf_integers
 
 
@@ -163,36 +164,7 @@ def map_heights_to_pressure(lons, lats, times, heights, ds):
         previous_pressure = pressures[i]
         previous_height = heights[i]
         
-    return pressures
-
-def round_conus_time(t):
-    """
-    Round the time to the nearest 5 minute interval
-    """
-    return round_time(t, minute_res=5)
-    
-def round_time(t, minute_res=10):
-    """
-    Round the time to the nearest 'minute_res' interval
-    """
-    minutes = int(np.round(t.minute/minute_res)*minute_res) % 60
-    
-    if minutes == 0 and t.minute > (60-minute_res/2):
-        return dt.datetime(t.year, t.month, t.day, t.hour+1, minutes)
-    else:
-        return dt.datetime(t.year, t.month, t.day, t.hour, minutes)
-    
-def floor_time(t, minute_res=10):
-    """
-    Floor the time to the nearest 'minute_res' interval
-    """
-    minutes = int(np.floor(t.minute/minute_res)*minute_res) % 60
-    
-    if minutes == 0 and t.minute > (60-minute_res/2):
-        return dt.datetime(t.year, t.month, t.day, t.hour+1, minutes)
-    else:
-        return dt.datetime(t.year, t.month, t.day, t.hour, minutes)
-    
+    return pressures  
 
 def get_pixel_time_parameters(nc):
     """
