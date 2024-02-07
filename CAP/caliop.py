@@ -6,7 +6,7 @@ from pyhdf.SD import SD, SDC
 from pyhdf import HDF, VS
 import skimage.measure
 
-from .geometry import *
+from .geometry import GroundTrack
 from .vertical_feature_mask import interpret_vfm
 from .visualization import *
 
@@ -176,7 +176,8 @@ class CALIOP:
             # If there is a fillvalue, use this 
             try:
                 fill_value = self.file.select(dataset).fillvalue
-                return np.ma.masked_equal(self.file.select(dataset)[:], fill_value)
+                return np.ma.masked_equal(self.file.select(dataset)[:],
+                                            fill_value)
 
             except:
                 return self.file.select(dataset)[:]
@@ -200,7 +201,9 @@ class CALIOP:
         return ascending
     
     def get_cloud_filter(self, backscatter_threshold=0.007,
-                             width_threshold=1000, thickness_threshold=240, area_threshold=10, return_backscatters=False, **kwargs):
+                             width_threshold=1000, thickness_threshold=240,
+                             area_threshold=10, return_backscatters=False,
+                            **kwargs):
         """
         Filters out noise in CALIOP L1 profiles based on thresholding the backscatter
         values. 
