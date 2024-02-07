@@ -1,5 +1,6 @@
 import numpy as np
 import datetime as dt
+from scipy.integrate import odeint
 
 from .constants import RADIUS_EARTH
 from .interpolation import interpolate_4d
@@ -133,3 +134,108 @@ def advection_rhs(x, t, t0, pressure, u, v, longitudes, latitudes,
         dx[0] = np.nan
         dx[1] = np.nan
     return dx
+
+def get_advected_positions(lons, lats, times, heights, pressures, weather,
+                            adv_time):
+    """
+    Get the advected positions of the CALIOP profiles at the time 'adv_time'
+    using the ERA5 winds.
+
+    Parameters
+    ----------
+    lons: np.array
+        Longitude of CALIPSO ground track, degrees
+    lats: np.array
+        Latitude of CALIPSO ground track, degrees
+    times: np.array
+        Times of CALIPSO ground track, UTC
+    heights: np.array
+        Geometric altitude in meters
+    pressures: np.array
+        Pressure in hPa
+    weather: xr.Dataset
+        ERA5 weather dataset
+    adv_time: dt.datetime
+        Time to advect to
+    
+    Returns
+    -------
+    adv_lons: np.array
+        Advected longitudes
+    adv_lats: np.array
+        Advected latitudes
+    """
+    
+    # Unpack data from dataset and convert to float64
+    # to comply with `advection_rhs` function.
+    u = weather.u.values.astype(np.float64)
+    v = weather.v.values.astype(np.float64)
+    longitudes = weather.longitude.values.astype(np.float64)
+    latitudes = weather.latitude.values.astype(np.float64)
+    pressures_k = weather.isobaricInhPa.values.astype(np.float64)
+    times_l = weather.time.values
+    
+    adv_lons = np.nan*np.zeros_like(pressures)
+    adv_lats = np.nan*np.zeros_like(pressures)
+    indices = np.where(~np.isnan(heights))[0]
+    for i in indices:
+        x0 = np.array([lons[i], lats[i]])
+        Dt = [(adv_time - times[i]).total_seconds()]
+        t_ode = np.hstack((np.array([0.0]), np.array(Dt)))
+        sol = odeint(advection_rhs, x0, t_ode,
+                    args=(times[i], pressures[i], u, v, longitudes, latitudes,
+                    pressures_k, times_l))
+        
+        adv_lons[i] = sol[1,0]
+        adv_lats[i] = sol[1,1]
+
+    return adv_lons, adv_lats
+
+        
+def get_interpolated_winds(lons, lats, times, heights, pressures, weather):
+    """
+    Interpolate the ERA5 winds to the CALIOP profile locations.
+
+    Parameters
+    ----------
+    lons: np.array
+        Longitude of CALIPSO ground track, degrees
+    lats: np.array
+        Latitude of CALIPSO ground track, degrees
+    times: np.array
+        Times of CALIPSO ground track, UTC
+    heights: np.array
+        Geometric altitude in meters
+    pressures: np.array
+        Pressure in hPa
+    weather: xr.Dataset
+        ERA5 weather dataset
+
+    Returns
+    -------
+    us: np.array
+        Interpolated zonal winds
+    vs: np.array
+        Interpolated meridional winds
+    """
+    
+    
+    era5_lons = weather.longitude.values.astype(np.float64)
+    era5_lats = weather.latitude.values.astype(np.float64)
+    era5_pressures = weather.isobaricInhPa.values.astype(np.float64)
+    era5_times = weather.time.values
+    u = weather.u.values.astype(np.float64)
+    v = weather.v.values.astype(np.float64)
+
+    us = np.nan*np.zeros_like(pressures)
+    vs = np.nan*np.zeros_like(pressures)
+    indices = np.where(~np.isnan(heights))[0]
+    for i in indices:
+        u_itp, v_itp = interpolate_winds(lons[i], lats[i], pressures[i],
+                                        times[i], u, v, era5_lons, era5_lats,
+                                        era5_pressures, era5_times)
+
+        us[i] = u_itp
+        vs[i] = v_itp
+
+    return us, vs
