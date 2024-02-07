@@ -15,21 +15,26 @@ import numpy as np
 import multiprocessing 
 
 
-sys.path.append(os.path.dirname(__file__) + "../src/")
+sys.path.append("/home/vmeijer/contrail-height-estimation/")
 
-from caliop import *
-from geometry import * 
-from collocation  import *
-from abi import *
-from utils import *
+from CAP.caliop import *
+from CAP.geometry import * 
+from CAP.collocation  import *
+from CAP.abi import *
+from CAP.utils import *
 
-SAVE_DIR = "/home/vmeijer/contrail-height-estimation/data/coarse/"
+SAVE_DIR = "/home/vmeijer/contrail-height-estimation/data/"
+SUFFIX = "_coarse_collocation.parquet"
 
 def get_mask(time, conus=False):
 
-    if conus:
+    if conus or time > dt.datetime(2021, 12, 31):
+
+        suffix = "F"
+        if conus:
+            suffix = "C"
         path = "/net/d13/data/vmeijer/data/orthographic_detections_goes16/" \
-                + "ABI-L2-MCMIPC" + time.strftime("/%Y/%j/%H/%Y%m%d_%H_%M.csv")
+                + "ABI-L2-MCMIP" + suffix + time.strftime("/%Y/%j/%H/%Y%m%d_%H_%M.csv")
         try:
             df = pd.read_csv(path) 
         except FileNotFoundError as e:
@@ -53,22 +58,26 @@ def main(input_path, save_path):
         print(f"Already done for {input_path}, result at {save_path}")
         return
     try:
-        df = coarse_collocation(input_path, get_mask, conus=False, verbose=True)
-        df.to_pickle(save_path)
+        df = coarse_collocation(input_path, get_mask, conus=True, verbose=True)
+        df.to_parquet(save_path)
         return 
     except Exception as e:
         print(f"Failed for {input_path} with {str(e)}")
         return
 
 if __name__ == "__main__":
-    paths = np.sort(glob.glob("/net/d13/data/vmeijer/data/CALIPSO/CALIOP_L1/CAL_LID_L1-Standard-V4*.hdf"))[:10]
-    save_paths = np.array([SAVE_DIR + os.path.basename(p).replace(".hdf",".pkl") for p in paths])
+    paths = ["/home/vmeijer/contrail-height-estimation/data/CAL_LID_L1-Standard-V4-10.2018-08-08T18-58-40ZD_Subset.hdf"]
+    
+    save_paths = []
+    for p in paths:
+        save_paths.append(os.path.join(SAVE_DIR,
+                    os.path.basename(p).replace(".hdf", SUFFIX)))
 
     if sys.argv[-1] == "DEBUG":
         for p, s in zip(paths, save_paths):
             main(p, s)
     else:
-        n_cpus = os.environ.get("SLURM_CPUS_PER_TASK", 1)
+        n_cpus = int(os.environ.get("SLURM_CPUS_PER_TASK", 1))
 
         pool = multiprocessing.Pool(n_cpus)
 

@@ -1,8 +1,8 @@
 #!/home/vmeijer/.conda/envs/gspy/bin/python -u
 
 #SBATCH --time=1-00:00:00
-#SBATCH --mem=48G
-#SBATCH --cpus-per-task=24
+#SBATCH --mem=24G
+#SBATCH --cpus-per-task=12
 #SBATCH --partition=normal
 #SBATCH -J append_aux
 
@@ -22,7 +22,7 @@ import numpy as np, xarray as xr, pandas as pd, datetime as dt
 from contrails.satellites.goes.abi import get_look_angles
 
 
-SAVE_DIR = "/home/vmeijer/contrail-height-estimation/data/L2_ABI_aux/"
+SAVE_DIR = "/home/vmeijer/contrail-height-estimation/data/fine_inspected_v4/"
 
 def append_surface_temperature_data(df):
     
@@ -73,7 +73,8 @@ def main(input_path, save_path):
         return
     try:
         print(f"Started appending auxiliary data to {input_path}")
-        df = append_surface_temperature_data(pd.read_pickle(input_path))
+        df = pd.read_pickle(input_path)
+        df["caliop_time"] = pd.to_datetime(df["caliop_time"])
         df = append_auxiliary_data(df)
         df = append_land_sea_mask_data(df)
         
@@ -91,7 +92,7 @@ def main(input_path, save_path):
 
 if __name__ == "__main__":
 
-    paths = np.sort(glob.glob("/home/vmeijer/contrail-height-estimation/data/L2_ABI/*.pkl"))
+    paths = np.sort(glob.glob("/home/vmeijer/contrail-height-estimation/data/fine_inspected_with_goes_v2/*.pkl"))
     save_paths = np.array([SAVE_DIR + os.path.basename(p) for p in paths])
 
     if sys.argv[-1] == "DEBUG":

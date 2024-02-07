@@ -1,8 +1,8 @@
 #!/home/vmeijer/.conda/envs/gspy/bin/python -u
 
 #SBATCH --time=1-00:00:00
-#SBATCH --mem=12G
-#SBATCH --cpus-per-task=6
+#SBATCH --mem=24G
+#SBATCH --cpus-per-task=12
 #SBATCH --partition=normal
 #SBATCH -J append_goes
 
@@ -19,7 +19,7 @@ from utils import *
 
 from contrails.satellites.goes.abi import get_nc_path
 
-SAVE_DIR = "/home/vmeijer/contrail-height-estimation/data/L2_ABI/"
+SAVE_DIR = "/home/vmeijer/contrail-height-estimation/data/fine_inspected_with_goes_v2/"
 
 
 def append_ABI_data(df):
@@ -154,8 +154,6 @@ def append_regional_max_ABI_data(df, region_size=29):
     return df.dropna(subset=df_cols)
 
 
-
-
 def main(input_path, save_path):
 
     if os.path.exists(save_path):
@@ -163,7 +161,9 @@ def main(input_path, save_path):
         return
     try:
         print(f"Started appending ABI data to {input_path}")
-        df = append_ABI_data(pd.read_pickle(input_path))
+        df = pd.read_pickle(input_path)
+        df = df[df.manual_inspection.str.lower() == "correct"].reset_index()
+        df = append_ABI_data(df)
 
         if len(df) > 0:
             df = append_regional_max_ABI_data(df)
@@ -180,7 +180,7 @@ def main(input_path, save_path):
 
 if __name__ == "__main__":
 
-    paths = np.sort(glob.glob("/home/vmeijer/contrail-height-estimation/data/L2/*.pkl"))[:10]
+    paths = np.sort(glob.glob("/home/vmeijer/contrail-height-estimation/data/fine_inspected_v3/*.pkl"))
     save_paths = np.array([SAVE_DIR + os.path.basename(p) for p in paths])
 
     if sys.argv[-1] == "DEBUG":

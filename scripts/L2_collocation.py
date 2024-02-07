@@ -50,7 +50,7 @@ def main(input_path, save_path):
         return
 
 if __name__ == "__main__":
-    paths = np.sort(glob.glob("/net/d13/data/vmeijer/data/CALIPSO/CALIOP_L2/CAL_LID_L2*.hdf"))
+    paths = np.sort(glob.glob("/net/d13/data/vmeijer/data/CALIPSO/CALIOP_L2/CAL_LID_L2*.hdf"))[::-1]
     save_paths = np.array([SAVE_DIR + os.path.basename(p).replace(".hdf",".pkl") for p in paths])
 
     if sys.argv[-1] == "DEBUG":
