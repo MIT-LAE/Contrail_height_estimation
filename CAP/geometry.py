@@ -190,7 +190,9 @@ class GreatCirclePath:
         
         dist = np.arcsin(np.sin(angular_distance) \
                 * np.sin(bearing_start_third-bearing_start_end)) * RADIUS_EARTH
-        return dist
+
+        # Divide by 1000 to convert from m to km
+        return dist / 1000
     
     def get_coordinates(self, n_points=100):
         """
