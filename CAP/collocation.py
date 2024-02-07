@@ -13,7 +13,7 @@ from .geometry import parallax_correction_vicente_backward
 from .advection import get_interpolated_winds, get_advected_positions
 from .abi import (get_ABI_grid_locations, geodetic2ABI, CONUS_FIRST_COL,
                 CONUS_FIRST_ROW, get_scan_start_time, get_pixel_times,
-                map_geodetic_extent_to_ABI, TRANSITION_TIME)
+                map_geodetic_extent_to_ABI, TRANSITION_TIME, label_scan_rows)
 from .utils import (get_lons, get_lats, get_ortho_ids, get_netcdf_asset,
                     floor_time, round_conus_time)
 from .vertical_feature_mask import get_cirrus_fcf_integers
@@ -172,46 +172,7 @@ def map_heights_to_pressure(lons, lats, times, heights, ds):
         previous_pressure = pressures[i]
         previous_height = heights[i]
         
-    return pressures  
-
-
-        
-        
-def label_scan_rows(lons, lats, boundaries=np.array([0, 229, 483, 737, 991, 1245]), conus_first_row=422,
-                   conus_first_col=902):
-    """
-    The orthographic projection used for the Meijer et al. (2022) contrail detections
-    is covered by 6 ABI "scan rows". This function finds the scan row of each
-    input coordinate.
-
-    Parameters
-    ----------
-    lons : np.array
-        Longitude, degrees
-    lats : np.array
-        Latitude, degrees
-    boundaries : np.array (optional)
-        The ABI fixed-grid rows of the scan row boundaries
-    conus_first_row : int (optional)
-        The first row of the ABI conus product (w.r.t the Full disk fixed-grid)
-    conus_first_col : int (optional)
-        The first column of the ABI conus product (w.r.t the Full disk fixed-grid)
-    
-    Returns
-    -------
-    scan_rows : np.array
-        The identified scan rows
-    """
-    x_caliop, y_caliop = geodetic2ABI(lons, lats)
-    rows, cols = get_ABI_grid_locations(x_caliop,y_caliop)
-    rows -= conus_first_row
-    cols -= conus_first_col
-
-    scan_rows = np.argmin(np.maximum(rows[:,np.newaxis] - boundaries[np.newaxis,:],
-                          -10e3*(rows[:,np.newaxis] - boundaries[np.newaxis,:])), axis=1)
-    
-    return scan_rows
-
+    return pressures
 
 def segment_caliop_product(lons, lats, times):
     """

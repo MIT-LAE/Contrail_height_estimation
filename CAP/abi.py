@@ -503,3 +503,39 @@ def find_closest_ABI_product(caliop_time, ABI_FD_row, ABI_FD_col):
         if "CONUS" in closest_product:
             start_time += dt.timedelta(minutes=5*(int(closest_product[-1])-1))
         return closest_product, start_time
+
+
+def label_scan_rows(lons, lats, boundaries=np.array([0, 229, 483, 737, 991, 1245]), conus_first_row=422,
+                   conus_first_col=902):
+    """
+    The orthographic projection used for the Meijer et al. (2022) contrail detections
+    is covered by 6 ABI "scan rows". This function finds the scan row of each
+    input coordinate.
+
+    Parameters
+    ----------
+    lons : np.array
+        Longitude, degrees
+    lats : np.array
+        Latitude, degrees
+    boundaries : np.array (optional)
+        The ABI fixed-grid rows of the scan row boundaries
+    conus_first_row : int (optional)
+        The first row of the ABI conus product (w.r.t the Full disk fixed-grid)
+    conus_first_col : int (optional)
+        The first column of the ABI conus product (w.r.t the Full disk fixed-grid)
+    
+    Returns
+    -------
+    scan_rows : np.array
+        The identified scan rows
+    """
+    x_caliop, y_caliop = geodetic2ABI(lons, lats)
+    rows, cols = get_ABI_grid_locations(x_caliop,y_caliop)
+    rows -= conus_first_row
+    cols -= conus_first_col
+
+    scan_rows = np.argmin(np.maximum(rows[:,np.newaxis] - boundaries[np.newaxis,:],
+                          -10e3*(rows[:,np.newaxis] - boundaries[np.newaxis,:])), axis=1)
+    
+    return scan_rows
