@@ -978,7 +978,7 @@ def coarse_L2_collocation(path, verbose=False):
         return df 
     else:
         if verbose:
-            print(f"Finished coarse collocation for {os.path.basename(path)}, no contrails found")
+            print(f"Finished coarse collocation for {os.path.basename(path)}, no cirrus found")
         return pd.DataFrame({"result":["no collocations found"]})
         
         
