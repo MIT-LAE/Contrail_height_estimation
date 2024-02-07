@@ -1,17 +1,16 @@
-from .caliop import CALIOP
+from typing import List
+import os
+import datetime as dt
+
+import numpy as np
+import scipy.constants
+from pyhdf.SD import SD, SDC
+
 
 IIR_CENTRAL_WAVELENGTH = {1 : 8.621, 2 : 10.635, 3 : 12.058}
 IIR_A0 = {1 : -0.768212, 2 : -0.302290, 3 : -0.466275}
 IIR_A1 = {1 : 0.002729, 2 : 0.001314, 3 : 0.002299}
 
-# Planck's constant in J/Hz
-PLANCK_CONSTANT = 6.62607015e-34
-
-# Boltzmann constant in J/k
-BOLTZMANN_CONSTANT = 1.380649e-23
-
-# Speed of light in m/s
-SPEED_OF_LIGHT = 299792458.
 
 def planck_function(T, lamda):
     """
@@ -30,8 +29,8 @@ def planck_function(T, lamda):
     B: float
         Radiance in W/m^2/steradian/micrometer
     """
-    return 2*((PLANCK_CONSTANT*SPEED_OF_LIGHT**2)/((lamda*1e-6)**5))*\
-                1/(np.exp(PLANCK_CONSTANT * SPEED_OF_LIGHT / ((lamda*1e-6)*BOLTZMANN_CONSTANT*T)) -1 )
+    return 2*((scipy.constants.h*scipy.constants.c**2)/((lamda*1e-6)**5))*\
+                1/(np.exp(scipy.constants.h * scipy.constants.c / ((lamda*1e-6)*scipy.constants.k*T)) -1 )
 
 
 def get_IIR_BT(radiances, channel):
@@ -74,7 +73,7 @@ def get_brightness_temperature(I, lamda):
         Brightness temperature in Kelvin
     """
     lamda = lamda * 1e-6
-    return PLANCK_CONSTANT * SPEED_OF_LIGHT / (lamda * BOLTZMANN_CONSTANT * np.log(1 + 2 * PLANCK_CONSTANT * SPEED_OF_LIGHT**2 / (lamda**5 * I)))
+    return scipy.constants.h * scipy.constants.c / (lamda * scipy.constants.k * np.log(1 + 2 * scipy.constants.h * scipy.constants.c**2 / (lamda**5 * I)))
 
 
 class IIR:
@@ -226,6 +225,7 @@ class IIR:
         else:
             fill_value = self.file.select(dataset).fillvalue
             return np.ma.masked_equal(self.file.select(dataset)[:], fill_value), self.file.select(dataset)["units"]
+
 
 def get_IIR_image(caliop, extent, channel=1, return_coords=True):
     
