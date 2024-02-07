@@ -616,7 +616,7 @@ def prepare_fine_collocation(coarse_df, verbose=False, L2=False):
         print(f"No coarse collocations found in domain, skipping")
         return
 
-    # If last latitude is greater than first, orbit is ascending.
+    # If the last latitude is greater than first, the orbit is ascending.
     # This only works for the subsetted CALIOP data we are using in this work
     # as we have the guarantee that the latitude is either monotonically
     # increasing or decreasing
