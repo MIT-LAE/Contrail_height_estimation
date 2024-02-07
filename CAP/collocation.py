@@ -1,35 +1,48 @@
-from skimage.measure import label, regionprops
-import numpy as np, pandas as pd
 import os
 from collections import defaultdict
-
 import datetime as dt
+
+import numpy as np
+import pandas as pd
+from skimage.measure import label, regionprops
 import scipy.interpolate
+import scipy.constants
+
 from .caliop import *
 from .geometry import *
 
 from contrails.meteorology.advection import *
-from .abi import *
-from .utils import *
+from .abi import (get_ABI_grid_locations, geodetic2ABI, CONUS_FIRST_COL,
+                CONUS_FIRST_ROW, get_scan_start_time, get_pixel_times,
+                map_geodetic_extent_to_ABI)
+from .utils import (get_lons, get_lats, get_ortho_ids, get_netcdf_asset)
 
 from .vertical_feature_mask import *
 
 
-# Time when Full Disk GOES-16 product refresh rate changed from 15 to 10 minutes
+# See https://www.eoportal.org/satellite-missions/calipso#
+CALIOP_HORIZONTAL_RESOLUTION = 333 # m
+CALIOP_VERTICAL_RESOLUTION = 30 # m
+
+# Time when Full Disk GOES-16 product refresh rate changed from 15 to 10 min.
 TRANSITION_TIME = dt.datetime(2019, 4, 2)
 
 # TODO: Remove me when open sourcing
 ASSET_PATH = "/home/vmeijer/contrails/contrails/satellites/assets/"
 
-COLUMNS = ["Layer_Top_Altitude", "Layer_Base_Altitude", "Feature_Classification_Flags", "ExtinctionQC_532",
-"Opacity_Flag", "Feature_Optical_Depth_532", "Feature_Optical_Depth_Uncertainty_532",
- "Ice_Water_Path", "Ice_Water_Path_Uncertainty", "Snow_Ice_Surface_Type"]
+COLUMNS = ["Layer_Top_Altitude", "Layer_Base_Altitude",
+            "Feature_Classification_Flags", "ExtinctionQC_532",
+            "Opacity_Flag", "Feature_Optical_Depth_532",
+            "Feature_Optical_Depth_Uncertainty_532", "Ice_Water_Path",
+            "Ice_Water_Path_Uncertainty", "Snow_Ice_Surface_Type"]
 
 def apply_cloud_filter(b532, b1064, backscatter_threshold=0.003,
-                             width_threshold=2000, thickness_threshold=100, area_threshold=10):
+            width_threshold=2000, thickness_threshold=100, area_threshold=10):
     """
-    Filters out noise in CALIOP L1 profiles based on thresholding the backscatter
-    values. 
+    Filters out noise in CALIOP L1 profiles based on thresholding the
+    backscatter values. 
+
+    Default parmaters are as suggested by Iwabuchi et al. (2012)
     
     Parameters
     ----------
@@ -54,8 +67,11 @@ def apply_cloud_filter(b532, b1064, backscatter_threshold=0.003,
     """
     
     mask = b532 + b1064 >= backscatter_threshold
+
+    # Returns connected components in the mask
     ccl = label(mask, connectivity=1)
     
+    # Loop though connected components
     to_remove = []
     for c in regionprops(ccl):
         
@@ -67,11 +83,16 @@ def apply_cloud_filter(b532, b1064, backscatter_threshold=0.003,
         # Vertical resolution is 30 m
         thickness = (box[2]-box[0])*30
         
-        if thickness < thickness_threshold or width < width_threshold or c.area < area_threshold:
+
+        conds = [thickness < thickness_threshold,
+                width < width_threshold,
+                c.area < area_threshold]
+
+        if np.all(conds):
             to_remove.append(c.label)
     
     negative_mask = np.isin(ccl, to_remove)
-    updated_mask = mask*(~negative_mask)
+    updated_mask = mask * (~negative_mask)
     
     return updated_mask 
 
@@ -99,8 +120,9 @@ def geometricaltitude2pressure(lon, lat, time, h, ds):
         Pressure in hPa
     """
     
+    # ERA5 geopotential altitude is in m^2/s^2
     gph_values = ds.z.interp(longitude=lon, latitude=lat, time=time,
-                         method="linear").values/9.81
+                         method="linear").values / scipy.constants.g
 
     itp = scipy.interpolate.interp1d(gph_values, ds.isobaricInhPa.values,
                                         fill_value="extrapolate")
@@ -111,6 +133,11 @@ def geometricaltitude2pressure(lon, lat, time, h, ds):
 
 
 def map_heights_to_pressure(lons, lats, times, heights, ds):
+    """
+    Convert geometric altitude by using the geopotential altitude,
+    but only do interpolation when necessary to avoid unnecessary
+    computation.
+    """
     
     indices = np.where(~np.isnan(heights))[0]
     
@@ -120,10 +147,15 @@ def map_heights_to_pressure(lons, lats, times, heights, ds):
     previous_pressure = 0.
     for i in indices:
         current_height = heights[i]
+
+        # Don't do anything if the height is the same as the previous
+        # This implicitly assumes that the height variation is smaller
+        # than the geopotential variation
         if current_height == previous_height:
             pressures[i] = previous_pressure
         else:
-            pressures[i] = geometricaltitude2pressure(lons[i], lats[i], times[i], current_height, ds)
+            pressures[i] = geometricaltitude2pressure(lons[i], lats[i],
+                                                times[i], current_height, ds)
         
         previous_pressure = pressures[i]
         previous_height = heights[i]
@@ -132,6 +164,31 @@ def map_heights_to_pressure(lons, lats, times, heights, ds):
             
         
 def get_interpolated_winds(lons, lats, times, heights, pressures, weather):
+    """
+    Interpolate the ERA5 winds to the CALIOP profile locations.
+
+    Parameters
+    ----------
+    lons: np.array
+        Longitude of CALIPSO ground track, degrees
+    lats: np.array
+        Latitude of CALIPSO ground track, degrees
+    times: np.array
+        Times of CALIPSO ground track, UTC
+    heights: np.array
+        Geometric altitude in meters
+    pressures: np.array
+        Pressure in hPa
+    weather: xr.Dataset
+        ERA5 weather dataset
+
+    Returns
+    -------
+    us: np.array
+        Interpolated zonal winds
+    vs: np.array
+        Interpolated meridional winds
+    """
     
     
     era5_lons = weather.longitude.values.astype(np.float64)
@@ -145,7 +202,8 @@ def get_interpolated_winds(lons, lats, times, heights, pressures, weather):
     vs = np.nan*np.zeros_like(pressures)
     indices = np.where(~np.isnan(heights))[0]
     for i in indices:
-        u_itp, v_itp = interpolate_winds(lons[i], lats[i], pressures[i], times[i], u, v, era5_lons, era5_lats,
+        u_itp, v_itp = interpolate_winds(lons[i], lats[i], pressures[i],
+                                        times[i], u, v, era5_lons, era5_lats,
                                         era5_pressures, era5_times)
 
         us[i] = u_itp
@@ -155,9 +213,39 @@ def get_interpolated_winds(lons, lats, times, heights, pressures, weather):
     return us, vs
 
     
-def get_advected_positions(lons, lats, times, heights, pressures, weather, adv_time):
+def get_advected_positions(lons, lats, times, heights, pressures, weather,
+                            adv_time):
+    """
+    Get the advected positions of the CALIOP profiles at the time 'adv_time'
+    using the ERA5 winds.
+
+    Parameters
+    ----------
+    lons: np.array
+        Longitude of CALIPSO ground track, degrees
+    lats: np.array
+        Latitude of CALIPSO ground track, degrees
+    times: np.array
+        Times of CALIPSO ground track, UTC
+    heights: np.array
+        Geometric altitude in meters
+    pressures: np.array
+        Pressure in hPa
+    weather: xr.Dataset
+        ERA5 weather dataset
+    adv_time: dt.datetime
+        Time to advect to
     
+    Returns
+    -------
+    adv_lons: np.array
+        Advected longitudes
+    adv_lats: np.array
+        Advected latitudes
+    """
     
+    # Unpack data from dataset and convert to float64
+    # to comply with `advection_rhs` function.
     u = weather.u.values.astype(np.float64)
     v = weather.v.values.astype(np.float64)
     longitudes = weather.longitude.values.astype(np.float64)
@@ -179,15 +267,19 @@ def get_advected_positions(lons, lats, times, heights, pressures, weather, adv_t
         adv_lons[i] = sol[1,0]
         adv_lats[i] = sol[1,1]
 
-    
     return adv_lons, adv_lats
     
+
 def round_conus_time(t):
-    
+    """
+    Round the time to the nearest 5 minute interval
+    """
     return round_time(t, minute_res=5)
     
 def round_time(t, minute_res=10):
-    
+    """
+    Round the time to the nearest 'minute_res' interval
+    """
     minutes = int(np.round(t.minute/minute_res)*minute_res) % 60
     
     if minutes == 0 and t.minute > (60-minute_res/2):
@@ -195,9 +287,10 @@ def round_time(t, minute_res=10):
     else:
         return dt.datetime(t.year, t.month, t.day, t.hour, minutes)
     
-    
 def floor_time(t, minute_res=10):
-    
+    """
+    Floor the time to the nearest 'minute_res' interval
+    """
     minutes = int(np.floor(t.minute/minute_res)*minute_res) % 60
     
     if minutes == 0 and t.minute > (60-minute_res/2):
@@ -207,17 +300,26 @@ def floor_time(t, minute_res=10):
     
 
 def get_pixel_time_parameters(nc):
+    """
+    Get the scan mode and scene id from the GOES-16 ABI netCDF file.
+    """
+    # Scan mode determines time between CONUS and Full-disk product
+    # scans
     scan_mode = int(nc.attrs["timeline_id"].split(" ")[-1])
+
+    # Whether the scan is a CONUS or Full-disk scan
     scene_id = nc.attrs["scene_id"]
     
-    # If conus, check whether it's the first or second CONUS scan during the full disk scan
+    # If conus, check whether it's the first or second CONUS scan during the
+    # full disk scan
     if scene_id == "CONUS":
-        
-        if round_conus_time(np.datetime64(nc.attrs["time_coverage_end"]).astype(dt.datetime)).minute % 10 == 0:
+        time = np.datetime64(nc.attrs["time_coverage_end"]).astype(dt.datetime)
+        if round_conus_time(time).minute % 10 == 0:
             scene_id += "2"
         else:
             scene_id += "1"
     return scan_mode, scene_id
+
 
 def find_closest_ABI_product(caliop_time, ABI_FD_row, ABI_FD_col):
     """
@@ -254,7 +356,7 @@ def find_closest_ABI_product(caliop_time, ABI_FD_row, ABI_FD_col):
         # Find start of full disk scan
         fd_time = floor_time(caliop_time, minute_res=15)
         
-        # We work with relative times
+        # We work with times relative to the start of the full disk scan
         rel_time = np.timedelta64(caliop_time - fd_time)
     
         # Get pixel time look up table
@@ -292,7 +394,7 @@ def find_closest_ABI_product(caliop_time, ABI_FD_row, ABI_FD_col):
         # Find start of full disk scan
         fd_time = floor_time(caliop_time, minute_res=10)
         
-        # We work with relative times
+        # We work with times relative to the start of the full disk scan
         rel_time = np.timedelta64(caliop_time - fd_time)
     
         # Get pixel time look up table
@@ -465,7 +567,8 @@ def extract_heights(profile_ids, cloud_mask, lidar_alts):
     
 
 
-def coarse_collocation(path, get_mask, threshold_dist=50.0, conus=False, verbose=False):
+def coarse_collocation(path, get_mask, threshold_dist=50.0, conus=False,
+                            verbose=False):
     """
     Perform a "coarse" collocation of a CALIOP L1 file at 'path' 
     by checking whether any contrails have been detected on GOES-16 images
@@ -522,30 +625,15 @@ def coarse_collocation(path, get_mask, threshold_dist=50.0, conus=False, verbose
     
     # Get mask for time 
     try:
-        mask_time = dt.datetime(t.year, t.month, t.day, t.hour, int(np.round(t.minute/minute_interval)*minute_interval))
+        mask_time = dt.datetime(t.year, t.month, t.day, t.hour,
+                        int(np.round(t.minute/minute_interval)*minute_interval))
     except ValueError:
-        # Doing it this way takes care of cornercase where the next hour is on the next day
+        # Doing it this way takes care of cornercase where the
+        # next hour is on the next day
         next_h = t + dt.timedelta(hours=1)
-        mask_time = dt.datetime(next_h.year, next_h.month, next_h.day, next_h.hour, 0)
+        mask_time = dt.datetime(next_h.year, next_h.month, next_h.day,
+                                    next_h.hour, 0)
         
-    # if not conus:
-    #     try:
-    #         try:
-    #             mask = get_mask(mask_time, 
-    #                         prediction_dir='/home/vmeijer/covid19/data/predictions_wo_sf/')
-    #         except FileNotFoundError:
-    #             path = "/net/d13/data/vmeijer/data/orthographic_detections_goes16/" \
-    #             + "ABI-L2-MCMIPF" + mask_time.strftime("/%Y/%j/%H/%Y%m%d_%H_%M.csv")
-    #             print(path)
-    #             df = pd.read_csv(path) 
-    #             mask = np.zeros((2000, 3000))
-    #             mask[df.row.values.astype(np.int64), df.col.values.astype(np.int64)] = 1
-                
-    #     except FileNotFoundError:
-    #         print(f"Did not find contrail mask corresponding to {os.path.basename(path)}")
-    #         print("Failed to find " + mask_time.strftime('%Y-%m-%d %H:%M'))
-    #         return
-    # else:
     found = False
     og_mask_time = mask_time - dt.timedelta(minutes=30)
     max_delta = 12
@@ -588,12 +676,14 @@ def coarse_collocation(path, get_mask, threshold_dist=50.0, conus=False, verbose
         
         #df.to_csv(save_path)
         if verbose:
-            print(f"Finished coarse collocation for {os.path.basename(path)}, found {n_collocated} candidate pixels")
+            print(f"Finished coarse collocation for {os.path.basename(path)},"\
+                    + f" found {n_collocated} candidate pixels")
 
         return df 
     else:
         if verbose:
-            print(f"Finished coarse collocation for {os.path.basename(path)}, no contrails found")
+            print(f"Finished coarse collocation for {os.path.basename(path)},"\
+                + " no contrails found")
         return pd.DataFrame({"result":["no collocations found"]})
 
 
@@ -603,8 +693,9 @@ def fine_collocation(coarse_df, get_mask, get_ERA5_data, verbose=False):
     L1_path = coarse_df.iloc[0].caliop_path
 
     prep_df = prepare_fine_collocation(coarse_df, verbose=verbose)
-    
-    
+    if prep_df is None:
+        print(f"No coarse collocations remain after preparation, skipping")
+        return
     if verbose:
         print(f"Starting fine L1 collocation for {os.path.basename(L1_path)}")
 
@@ -635,11 +726,6 @@ def fine_collocation(coarse_df, get_mask, get_ERA5_data, verbose=False):
 
         # Subset caliop data
         extent = [-135, -45, lat_min, lat_max]
-
-        # b532, lons, lats, times = subset_caliop_profile(ca, "Total_Attenuated_Backscatter_532",
-        #                                         extent, return_coords=True)
-        
-        
 
         cloud_mask, b532, b1064, lons, lats, times = ca.get_cloud_filter(extent=extent,
                                             return_backscatters=True, min_alt=8, max_alt=15)
@@ -681,16 +767,23 @@ def fine_collocation(coarse_df, get_mask, get_ERA5_data, verbose=False):
         indices = ~np.isnan(heights)
 
         # Do advection
-        adv_lons, adv_lats = get_advected_positions(lons[indices], lats[indices], times[indices],
-                                    heights[indices], ps[indices], weather, advection_time)
+        adv_lons, adv_lats = get_advected_positions(lons[indices],
+                                                    lats[indices],
+                                                    times[indices],
+                                                    heights[indices],
+                                                    ps[indices],
+                                                    weather,
+                                                    advection_time)
+
         subindices = ~(np.isnan(adv_lons)+np.isnan(adv_lats))
         adv_lons = adv_lons[subindices]
         adv_lats = adv_lats[subindices]
 
         try:
             # Invert parallax
-            lons_c, lats_c = parallax_correction_vicente_backward(adv_lons, adv_lats,
-                                                                    heights[indices][subindices])
+            lons_c, lats_c = parallax_correction_vicente_backward(adv_lons,
+                                                                 adv_lats,
+                                                heights[indices][subindices])
         except ValueError:
             print("Parallax correction error")
             print(goes_time, L1_path)
@@ -778,11 +871,15 @@ def prepare_fine_collocation(coarse_df, verbose=False, L2=False):
         lons = lons[mask]
         lats = lats[mask]
         times = times[mask]
-        
+    
+    if len(lats) == 0:
+        print(f"No coarse collocations found in domain, skipping")
+        return
     ascending = lats[-1] > lats[0]
 
     # Segment overpass
     #try:
+    
     segments = segment_caliop_product(lons, lats, times)
 
     # except ValueError:
@@ -890,7 +987,8 @@ def fine_L2_collocation(coarse_df, get_ERA5_data, verbose=False):
     L2_path = coarse_df.iloc[0].caliop_path
 
     prep_df = prepare_fine_collocation(coarse_df, L2=True, verbose=verbose)
-    
+    if len(prep_df) == 0:
+        print(f"No coarse collocations remain after preparation, skipping")
     if verbose:
         print(f"Starting fine L2 collocation for {os.path.basename(L2_path)}")
 
@@ -952,15 +1050,20 @@ def fine_L2_collocation(coarse_df, get_ERA5_data, verbose=False):
         
         ABI_extent = map_geodetic_extent_to_ABI(extent, conus=conus)
 
-        sub_pixel_times = np.sort(pixel_times[ABI_extent[2]:ABI_extent[3],ABI_extent[0]:ABI_extent[1]].flatten())
+        sub_pixel_times = np.sort(pixel_times[ABI_extent[2]:ABI_extent[3],
+                                        ABI_extent[0]:ABI_extent[1]].flatten())
 
         median_idx = len(sub_pixel_times)//2
         advection_time = pd.Timestamp(sub_pixel_times[median_idx]).to_pydatetime()
 
 
         # Do advection
-        adv_lons, adv_lats = get_advected_positions(sub_lons, sub_lats, sub_times,
-                                                    sub_heights, ps, weather, advection_time)
+        adv_lons, adv_lats = get_advected_positions(sub_lons, sub_lats,
+                                                    sub_times,
+                                                    sub_heights,
+                                                    ps, 
+                                                    weather,
+                                                    advection_time)
 
         subindices = ~(np.isnan(adv_lons)+np.isnan(adv_lats))
         adv_lons = adv_lons[subindices]
@@ -968,8 +1071,9 @@ def fine_L2_collocation(coarse_df, get_ERA5_data, verbose=False):
 
         try:
             # Invert parallax
-            lons_c, lats_c = parallax_correction_vicente_backward(adv_lons, adv_lats,
-                                                                    sub_heights[subindices])
+            lons_c, lats_c = parallax_correction_vicente_backward(adv_lons,
+                                                                adv_lats,
+                                                    sub_heights[subindices])
         except ValueError:
             print("Parallax correction error")
             print(goes_time, L1_path)
@@ -1007,7 +1111,8 @@ def fine_L2_collocation(coarse_df, get_ERA5_data, verbose=False):
             data["adv_time"].extend(n_matched*[advection_time])
             data["goes_ABI_id"].extend(list(caliop_ids))
 
-            matched_rows, matched_cols = np.unravel_index(caliop_ids, (5424, 5424))
+            matched_rows, matched_cols = np.unravel_index(caliop_ids,
+                                                        (5424, 5424))
             data["goes_ABI_row"].extend(list(matched_rows))
             data["goes_ABI_col"].extend(list(matched_cols))
             data["goes_product"].extend(n_matched*[goes_product])
