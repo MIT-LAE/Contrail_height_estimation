@@ -8,19 +8,18 @@ from skimage.measure import label, regionprops
 import scipy.interpolate
 import scipy.constants
 
-from .caliop import *
-from .geometry import *
-
-from contrails.meteorology.advection import *
+from .caliop import CALIOP
+from .geometry import parallax_correction_vicente_backward
+from .advection import interpolate_winds, advection_rhs
 from .abi import (get_ABI_grid_locations, geodetic2ABI, CONUS_FIRST_COL,
                 CONUS_FIRST_ROW, get_scan_start_time, get_pixel_times,
                 map_geodetic_extent_to_ABI)
 from .utils import (get_lons, get_lats, get_ortho_ids, get_netcdf_asset)
-
-from .vertical_feature_mask import *
+from .vertical_feature_mask import get_cirrus_fcf_integers
 
 
 # See https://www.eoportal.org/satellite-missions/calipso#
+# Refers to L1b product resolution
 CALIOP_HORIZONTAL_RESOLUTION = 333 # m
 CALIOP_VERTICAL_RESOLUTION = 30 # m
 
