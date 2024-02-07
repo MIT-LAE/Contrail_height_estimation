@@ -3,7 +3,7 @@ import os
 import numpy as np
 from scipy.optimize import bisect, newton
 
-from .abi import GOES16_params
+from .abi import GOES16_PARAMS
 from .constants import GRS80_PARAMS, RADIUS_EARTH
 
 class GroundTrack:
