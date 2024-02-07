@@ -86,16 +86,14 @@ def floor_time(t, minute_res=10):
         return dt.datetime(t.year, t.month, t.day, t.hour, minutes)
     
 
-
-
-
 def get_image_tile_indices(rows, cols, region_size, image_shape):
     """
-    For given input locations (representing the approximate centers of the tiles) within an image
-    and a 'tile size', will return the indices within the image to create these tiles.
+    For given input locations (representing the approximate centers of the
+    tiles) within an image and a 'tile size', will return the indices within
+    the image to create these tiles.
     
-    If the region_size is not odd, the given 'rows' and 'cols' will not correspond to
-    the tile centers.
+    If the region_size is not odd, the given 'rows' and 'cols' will not
+    correspond to the tile centers.
     
     Parameters
     ----------
@@ -125,7 +123,8 @@ def get_image_tile_indices(rows, cols, region_size, image_shape):
     reg_cols = np.tile(cols, (region_size**2, 1))
     reg_rows = np.tile(rows, (region_size**2, 1))
 
-    offsets = np.arange(-(region_size-surplus)//2,  surplus+(region_size-surplus)//2)
+    offsets = np.arange(-(region_size - surplus) // 2,
+                         surplus + (region_size - surplus) // 2)
 
     reg_cols += np.tile(offsets, (region_size))[:,np.newaxis]
     reg_rows += np.repeat(offsets, (region_size))[:, np.newaxis]
@@ -142,4 +141,3 @@ def get_image_tile_indices(rows, cols, region_size, image_shape):
     reg_cols[:,right_margins < 0] += right_margins[right_margins < 0]
     
     return reg_rows, reg_cols
-    
