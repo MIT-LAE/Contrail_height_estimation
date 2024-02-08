@@ -346,7 +346,7 @@ def get_scan_start_time(goes_time, scan_mode, product):
             # was active. These start times are found in the filenames. 
             # They tend to fluctuate by a few seconds with a 21 second mean.
             # We add 5 minutes for every CONUS product after the first
-            offset = dt.timedelta(minutes=(2 + (conus_n-1)*5),
+            offset = dt.timedelta(minutes=(2 + (conus_n - 1) * 5),
                         seconds=21)
             return product_time + offset
             
@@ -371,7 +371,7 @@ def get_scan_start_time(goes_time, scan_mode, product):
             # for the up-to-date scheduling, and an explanation for these
             # fluctuations
             # We add 5 minutes for every CONUS product after the first
-            return product_time + dt.timedelta(minutes=(1+(conus_n-1)*5),
+            return product_time + dt.timedelta(minutes=(1 + (conus_n - 1) * 5),
                         seconds=17)
             
         else:
@@ -428,85 +428,84 @@ def find_closest_ABI_product(caliop_time, ABI_FD_row, ABI_FD_col):
     -------
     closest_product : str
         The found ABI product name
-    start_time : dt.datetime
-        The scan start time of the found ABI product
+    product_time : dt.datetime
+        The ABI product time
     """
     ABI_CONUS_row = ABI_FD_row - CONUS_FIRST_ROW
     ABI_CONUS_col = ABI_FD_col - CONUS_FIRST_COL
-    
+
     
     # Mode 3, 3 CONUS scans for each 15 minute Full disk scan
     if caliop_time <= TRANSITION_TIME:
-        
-        # Find start of full disk scan
-        fd_time = floor_time(caliop_time, minute_res=15)
-        
-        # We work with times relative to the start of the full disk scan
-        rel_time = np.timedelta64(caliop_time - fd_time)
-    
-        # Get pixel time look up table
-        ds = get_netcdf_asset('mode3')
-        
-        # Get delta_times for each region
-        # Col/row reversal is on purpose due to LUT conventions
-        fd_t = ds["FD_pixel_times"][ABI_FD_col, ABI_FD_row].values
-        
-        # If out of domain, set to very large values
-        if ABI_CONUS_row >= N_ABI_CONUS_ROWS or ABI_CONUS_col >= N_ABI_CONUS_COLS:
-            c1_t = np.timedelta64(100000, 's')
-            c2_t = np.timedelta64(100000, 's')
-            c3_t = np.timedelta64(100000, 's')
-            
-        else:
-            c1_t = ds["CONUS1_pixel_times"][ABI_CONUS_col, ABI_CONUS_row].values + np.timedelta64(int(1000*(2*60+21.7)),'ms')
-            c2_t = ds["CONUS2_pixel_times"][ABI_CONUS_col, ABI_CONUS_row].values + np.timedelta64(int(1000*(7*60+21.7)),'ms')
-            c3_t = ds["CONUS3_pixel_times"][ABI_CONUS_col, ABI_CONUS_row].values + np.timedelta64(int(1000*(12*60+21.7)),'ms')
-        
-        fd_dt = (rel_time - fd_t)/np.timedelta64(1,'s')
-        c1_dt = (rel_time - c1_t)/np.timedelta64(1,'s')
-        c2_dt = (rel_time - c2_t)/np.timedelta64(1,'s')
-        c3_dt = (rel_time - c3_t)/np.timedelta64(1,'s')
-        
-        closest_product = ["FD", "CONUS1", "CONUS2" ,"CONUS3"][np.argmin(np.abs([fd_dt, c1_dt, c2_dt, c3_dt]))]
-        
-        start_time = fd_time
-        if "CONUS" in closest_product:
-            start_time += dt.timedelta(minutes=5*(int(closest_product[-1])-1))
-        return closest_product, start_time
-        
+        fd_interval = 15 # minutes
+        conus_per_fd = 3
+        scan_mode = 3
     # Mode 6, 2 CONUS scans for each 10 minute Full disk scan
     else:
-        # Find start of full disk scan
-        fd_time = floor_time(caliop_time, minute_res=10)
-        
-        # We work with times relative to the start of the full disk scan
-        rel_time = np.timedelta64(caliop_time - fd_time)
+        fd_interval = 10
+        conus_per_fd = 2
+        scan_mode = 6
     
-        # Get pixel time look up table
-        ds = get_netcdf_asset("mode6")
-        
-        # Get delta_times for each region
-        fd_t = ds["FD_pixel_times"][ABI_FD_col, ABI_FD_row].values
-        
-        # If out of domain, set to large values
-        if ABI_CONUS_row >= N_ABI_CONUS_ROWS or ABI_CONUS_col >= N_ABI_CONUS_COLS:
-            c1_t = np.timedelta64(100000, 's')
-            c2_t = np.timedelta64(100000, 's')
-            
-        else:
-            c1_t = ds["CONUS1_pixel_times"][ABI_CONUS_col, ABI_CONUS_row].values + np.timedelta64(int(1000*(2*60+21.7)),'ms')
-            c2_t = ds["CONUS2_pixel_times"][ABI_CONUS_col, ABI_CONUS_row].values + np.timedelta64(int(1000*(7*60+21.7)),'ms')
-            
-        fd_dt = (rel_time - fd_t)/np.timedelta64(1,'s')
-        c1_dt = (rel_time - c1_t)/np.timedelta64(1,'s')
-        c2_dt = (rel_time - c2_t)/np.timedelta64(1,'s')
+    # Find start of full disk scan
+    fd_time = floor_time(caliop_time, minute_res=fd_interval)
+    
+    # Get pixel time look up table
+    ds = get_netcdf_asset(f'mode{scan_mode}')
 
-        closest_product = ["FD", "CONUS1", "CONUS2"][np.argmin(np.abs([fd_dt, c1_dt, c2_dt]))]
-        
-        start_time = fd_time
-        if "CONUS" in closest_product:
-            start_time += dt.timedelta(minutes=5*(int(closest_product[-1])-1))
-        return closest_product, start_time
+    # Get delta_times for each product type (i.e. FD, CONUS1, ...)
+    product_rel_times = {}
+    # Col/row reversal is on purpose due to LUT conventions
+    product_rel_times["FD"] = ds["FD_pixel_times"][ABI_FD_col,
+                                ABI_FD_row].values
+
+
+    # Check if the pixel is within the CONUS product domain
+    # If not, we set the "relative times" to very large values
+    # such that the CONUS products are not considered
+    in_conus_domain = (ABI_CONUS_row < N_ABI_CONUS_ROWS) \
+                    * (ABI_CONUS_col < N_ABI_CONUS_COLS) \
+                    * (ABI_CONUS_row >= 0) \
+                    * (ABI_CONUS_col >= 0)
+
+    
+    for i in range(1, conus_per_fd + 1):
+        arr = ds[f"CONUS{i}_pixel_times"]
+
+        # Very large value to make sure the CONUS product is not 
+        # considered
+        if not in_conus_domain:
+            product_rel_times[f"CONUS{i}"] = np.timedelta64(100000, 's')
+        else:
+            # Col/row reversal is on purpose due to LUT conventions
+            product_rel_times[f"CONUS{i}"] = arr[ABI_CONUS_col,
+                                                ABI_CONUS_row].values
+
+    # Now we find the closest product by computing the time-deltas with the
+    # pixel capture times of eaach of the products
+    product_time_deltas = {}
+    for product, product_rel_time in product_rel_times.items():
+    
+        # Subtract scan start time from `caliop_time` to get the relative time
+        # to first pixel capture of a particular product. This is how the
+        # `product_rel_time` is given already
+        # input time to `get_scan_start_time` will be floored inside the fn
+        # so doesn't matter that we use the `fd_time`
+        scan_start_time = get_scan_start_time(fd_time,
+                                            scan_mode, product)
+        caliop_rel_time = np.timedelta64(caliop_time - scan_start_time)
+
+        # And finally, compute the absolute difference in seconds between the
+        # product pixel time and the `caliop_time`
+        product_time_deltas[product] = abs((product_rel_time \
+                                    - caliop_rel_time) / np.timedelta64(1,'s'))
+
+    closest_product = min(product_time_deltas, key=product_time_deltas.get)
+    product_time = fd_time
+    if "CONUS" in closest_product:
+        product_time += dt.timedelta(minutes=5 * (int(closest_product[-1]) \
+                                                    - 1))
+
+    return closest_product, product_time
 
 
 def label_scan_rows(lons, lats, boundaries=SWATH_BOUNDARIES):
