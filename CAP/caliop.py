@@ -19,6 +19,7 @@ CALIOP_ALTITUDES = np.hstack((np.arange(40.0, 30.1, -0.300),
                        np.arange(8.5, -0.5, -0.030)))
 
 
+
 # See https://www.eoportal.org/satellite-missions/calipso#
 # Refers to L1b product resolution
 CALIOP_HORIZONTAL_RESOLUTION = 333 # m
@@ -210,29 +211,126 @@ class CALIOP:
             ascending = False 
 
         return ascending
-    
-    def get_cloud_filter(self, backscatter_threshold=0.007,
-                             width_threshold=1000, thickness_threshold=240,
-                             area_threshold=10, return_backscatters=False,
-                            **kwargs):
+
+    def get_subset(self, dataset, extent, return_coords=False):
         """
-        Filters out noise in CALIOP L1 profiles based on thresholding the backscatter
-        values. 
+        Subset a particular CALIOP dataset to a geodetic extent.
+
+        Parameters
+        ----------
+        dataset: str
+            The name of the variable to subset
+        extent: list
+            List of minimum longitude, maximum longitude, minimum latitude,
+            maximum latitude in degrees
+        return_coords: bool (optional)
+            Option to return longitudes, latitudes, times of subsetted profile
+        
+        Returns
+        -------
+        subset_data: np.array
+            Subsetted data
+        """
+
+        # Extract longitudes, latitudes and UTC times
+        lons = caliop.get("Longitude")
+        lats = caliop.get("Latitude")
+        times = caliop.get_time()
+        
+        # Extract data
+        data = caliop.get(dataset)
+
+        if len(data.shape) != 2:
+            raise ValueError("Dataset must be 2D")
+
+        # Now apply subsetting
+        subset_mask = (lons >= extent[0])*(lons <= extent[1])\
+                        *(lats >= extent[2])*(lats <= extent[3])
+        subset_data = data[subset_mask[:,0], :]
+        
+        if return_coords:
+            return subset_data, lons[subset_mask], lats[subset_mask],
+                    times[subset_mask]
+            
+        else:
+            return subset_data
+
+    def get_interpolated_subset(self, dataset, extent, 
+            ve1=0.0, ve2=40.0, vres=CALIOP_VERTICAL_RESOLUTION,
+            return_coords=False):
+        """
+        Subset a particular CALIOP dataset to a geodetic extent and interpolate
+        to a regular grid in the vertical.
+
+        Parameters
+        ----------
+        dataset: str
+            The name of the variable to subset
+        extent: list
+            List of minimum longitude, maximum longitude, minimum latitude,
+            maximum latitude in degrees
+        ve1: float (optional)
+            The bottom of the interpolated grid in km
+        ve2: float (optional)
+            The top of the interpolated grid in km
+        vres: float (optional)
+            The vertical resolution to interpolate to, in m
+        return_coords: bool (optional)
+            Option to return longitudes, latitudes, times of subsetted profile
+        
+        Returns
+        -------
+        interpolated_subset: np.array
+            Subsetted and interpolated data
+        """
+        subset, sub_lons, sub_lats, sub_times = self.get_subset(dataset,
+                                                extent, return_coords=True)
+        
+        interpolated_subset = interpolate_caliop_profile(subset, ve1=ve1,
+                                                    ve2=ve2, vres=vres)
+        
+        if return_coords:
+            return interpolated, sub_lons, sub_lats, sub_times
+        else:
+            return interpolated_subset
+        
+    def get_cloud_mask(self, backscatter_threshold=BACKSCATTER_THRESHOLD,
+            width_threshold=WIDTH_THRESHOLD, 
+            thickness_threshold=THICKNESS_THRESHOLD, area_threshold=10,
+            return_backscatters=False, ve1=0.0, ve2=40.0,
+            vres=CALIOP_VERTICAL_RESOLUTION):
+        """
+        Filters out noise in CALIOP L1 profiles based on thresholding the
+        backscatter values. 
+
+        Default parameters are as suggested by Iwabuchi et al. (2012)
         
         Parameters
         ----------
+        b532: np.array
+            CALIOP L1 attenuated backscatter at 532 nm (rows correspond to
+            height)
+        b1064: np.array
+            CALIOP L1 attenuated backscatter at 1064 nm (rows correspond to
+            height)
         backscatter_threshold: float (optional)
             Used to threshold the sum of the 532 and 1064 nm backscatters,
             default value from Iwabuchi et al. (2012)
         width_threshold: float (optional)
-            The minimum width of a cloud in meters
+            The minimum width of a cloud in meters,
+            default value corresponds to GOES-16 nadir pixel size
         thickness_threshold: float (optional)
             The minimum thickness of a cloud in meters
         area_threshold: float (optional)
             Minimum area in 'pixels'
-        return_backscatters : bool (optional)
-            whether or not to return interpolated backscatter data
-
+        return_backscatters: bool (optional)
+            Whether or not to return the backscatter profiles as well
+        ve1: float (optional)
+            The bottom of the interpolated grid in km
+        ve2: float (optional)
+            The top of the interpolated grid in km
+        vres: float (optional)
+            The vertical resolution to interpolate to, in m
         Returns
         -------
         mask: np.array
@@ -240,49 +338,24 @@ class CALIOP:
         """
         extent = kwargs.get("extent", self.get_extent())
 
-        b532, lons, lats, times = subset_caliop_profile(self, "Total_Attenuated_Backscatter_532",
-                                                        extent, return_coords=True)
-        b1064 = subset_caliop_profile(self, "Attenuated_Backscatter_1064",
-                                                        extent, return_coords=False)
+        b532, lons, lats, times = self.get_interpolated_subset(
+                                    "Total_Attenuated_Backscatter_532",
+                                    extent, return_coords=True,
+                                    ve1=ve1, ve2=ve2, vres=vres)
+        b1064 = self.get_interpolated_subset("Attenuated_Backscatter_1064",
+                                    extent, return_coords=False,
+                                    ve1=ve1, ve2=ve2, vres=vres)
 
-        b532_itp = interpolate_caliop_profile(b532, ve1=kwargs.get("min_alt", 0.0)*1000,
-                                                    ve2=kwargs.get("max_alt", 40.)*1000)
-        
-        b1064_itp = interpolate_caliop_profile(b1064, ve1=kwargs.get("min_alt", 0.0)*1000,
-                                                    ve2=kwargs.get("max_alt", 40.)*1000)
-        
+        cloud_mask = get_cloud_mask_from_backscatters(b532.T, b1064.T,
+                            backscatter_threshold=backscatter_threshold,
+                            width_threshold=width_threshold,
+                            thickness_threshold=thickness_threshold,
+                            area_threshold=area_threshold)
 
-        mask = b532_itp.T + b1064_itp.T >= backscatter_threshold
-        ccl = skimage.measure.label(mask, connectivity=1)
-        
-        to_remove = []
-        for c in skimage.measure.regionprops(ccl):
-            
-            box = c.bbox
-
-            # Horizontal resolution is 333 m
-            width = (box[3] - box[1])*333
-
-            # Vertical resolution is 30 m
-            thickness = (box[2]-box[0])*30
-
-            
-            if thickness < thickness_threshold or width < width_threshold or c.area < area_threshold:
-                to_remove.append(c.label)
-
-            else:
-                max_backscatter_532 = b532_itp.T[box[0]:box[2], box[1]:box[3]].max()
-                if max_backscatter_532 < 0.0065:
-                    to_remove.append(c.label)
-
-            
-        negative_mask = np.isin(ccl, to_remove)
-        updated_mask = mask*(~negative_mask)
-        
         if not return_backscatters:
-            return updated_mask 
+            return cloud_mask 
         else:
-            return updated_mask, b532_itp, b1064_itp, lons, lats, times
+            return cloud_mask, b532.T, b1064.T, lons, lats, times
     
     def filter_rows(self, lat_min, lat_max, cirrus=True):
         """
@@ -395,10 +468,6 @@ class CALIOP:
         plt.close()
         return fig
 
-
-
-
-
 def filter_cirrus_feature(fcf):
     """
     Given a feature classification flag from the CALIOP L2 layer product,
@@ -424,22 +493,25 @@ def filter_cirrus_feature(fcf):
     return all(conditions)
 
     
-def interpolate_caliop_profile(data, lidar_alts=CALIOP_ALTITUDES, ve2=40.0e3, ve1=0.0, vres=30.0):
+def interpolate_caliop_profile(data, lidar_alts=CALIOP_ALTITUDES,
+                        ve1=np.min(CALIOP_ALTITUDES),
+                        ve1=np.max(CALIOP_ALTITUDES),
+                        vres=CALIOP_VERTICAL_RESOLUTION):
     """
-    Interpolates a CALIOP L1 profile to a regular grid.
+    Interpolates a CALIOP L1 dataset to a regular grid.
 
     Parameters
     ----------
     data: np.array
-        Data to interpolate
+        Data to interpolate. Rows should correspond to height.
     lidar_alts: np.array (optional)
         The altitude (MSL) corresponding to the rows of 'data', in km
-    ve2: float (optional)
-        Vertical coordinate of top of interpolated grid in meters
     ve1: float (optional)
-        Vertical coordinate of bottom of interpolated grid in meters
+        Vertical coordinate of bottom of interpolated grid in km
+    ve2: float (optional)
+        Vertical coordinate of top of interpolated grid in km
     vres: float (optional)
-        The vertical resolution to interpolate to
+        The vertical resolution to interpolate to, in meters
 
     Returns
     -------
@@ -447,62 +519,28 @@ def interpolate_caliop_profile(data, lidar_alts=CALIOP_ALTITUDES, ve2=40.0e3, ve
         Interpolated data
     """
 
+    # Bounds for horizontal dimension, derived from data
     e1 = 0
     e2 = data.shape[0]
     
     X = np.arange(e1, e2, dtype=np.float32)
+
+    # Multiply by a 1000 to convert to meters
     Y = np.meshgrid(1000*lidar_alts, X)[0].astype(np.float32)
     data = np.array(np.ma.masked_equal(data,  -9999).astype(np.float32))
-    interpolated = interp2d_12(data.astype(np.float32), X, Y, float(e1), float(e2), int(e2-e1), ve2, ve1,
-                       int((ve2-ve1)/vres))
+
+    # Multiply by a 1000 to convert to meters
+    interpolated = interp2d_12(data.astype(np.float32), 
+                       X, Y,
+                       float(e1), float(e2), int(e2 - e1), 
+                       ve2 * 1000,
+                       ve1 * 1000,
+                       int(1000 * (ve2 - ve1) / vres))
     
     return interpolated
-
-
-def subset_caliop_profile(caliop, dataset_name, extent,
-                             return_coords=False):
-    """
-    Subset a particular CALIOP profile to a geodetic extent.
-
-    Parameters
-    ----------
-    caliop: CALIOP
-        CALIOP object containing data to subset
-    dataset_name: str
-        The name of the variable to subset
-    extent: list
-        List of minimum longitude, maximum longitude, minimum latitude,
-        maximum latitude in degrees
-    return_coords: bool (optional)
-        Option to return longitudes, latitudes, times of subsetted profile
-    
-    Returns
-    -------
-    subset_data: np.array
-        Subsetted data
-    """
-    
-    # Extract longitudes, latitudes and UTC times
-    lons = caliop.get("Longitude")
-    lats = caliop.get("Latitude")
-    times = caliop.get_time()
-    
-    # Extract data
-    data = caliop.get(dataset_name)
-    
-    # Now apply subsetting
-    subset_mask = (lons >= extent[0])*(lons <= extent[1])\
-                    *(lats >= extent[2])*(lats <= extent[3])
-    subset_data = data[subset_mask[:,0], :]
-    
-    if return_coords:
-        return subset_data, lons[subset_mask], lats[subset_mask], times[subset_mask]
-        
-    else:
-        return subset_data
     
 
-def apply_cloud_filter(b532, b1064, 
+def get_cloud_mask_from_backscatters(b532, b1064, 
             backscatter_threshold=BACKSCATTER_THRESHOLD,
             width_threshold=WIDTH_THRESHOLD, 
             thickness_threshold=THICKNESS_THRESHOLD, area_threshold=10):
@@ -561,5 +599,4 @@ def apply_cloud_filter(b532, b1064,
     negative_mask = np.isin(ccl, to_remove)
     updated_mask = mask * (~negative_mask)
     
-    return updated_mask 
-
+    return updated_mask
