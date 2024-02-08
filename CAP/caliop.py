@@ -9,7 +9,6 @@ import skimage.measure
 from .geometry import GroundTrack
 from .vertical_feature_mask import interpret_vfm
 from .visualization import plot_caliop_profile_direct
-
 from .interpolation import interp2d_12
 
 PROJECTION_PATH = '/net/d13/data/vmeijer/reprojections/'
@@ -18,6 +17,18 @@ CALIOP_ALTITUDES = np.hstack((np.arange(40.0, 30.1, -0.300),
                        np.arange(30.1, 20.1, -0.180),
                        np.arange(20.1, 8.5, -0.060),
                        np.arange(8.5, -0.5, -0.030)))
+
+
+# See https://www.eoportal.org/satellite-missions/calipso#
+# Refers to L1b product resolution
+CALIOP_HORIZONTAL_RESOLUTION = 333 # m
+CALIOP_VERTICAL_RESOLUTION = 30 # m
+
+# See Iwabuchi et al. (2012), section 3.3:
+# https://agupubs.onlinelibrary.wiley.com/doi/full/10.1029/2011JD017020
+BACKSCATTER_THRESHOLD = 0.003 # km^-1 sr^-1
+WIDTH_THRESHOLD = 1000 # meter
+THICKNESS_THRESHOLD = 60 # meter
 
 
 class CollocationError(Exception):
@@ -490,3 +501,65 @@ def subset_caliop_profile(caliop, dataset_name, extent,
     else:
         return subset_data
     
+
+def apply_cloud_filter(b532, b1064, 
+            backscatter_threshold=BACKSCATTER_THRESHOLD,
+            width_threshold=WIDTH_THRESHOLD, 
+            thickness_threshold=THICKNESS_THRESHOLD, area_threshold=10):
+    """
+    Filters out noise in CALIOP L1 profiles based on thresholding the
+    backscatter values. 
+
+    Default parameters are as suggested by Iwabuchi et al. (2012)
+    
+    Parameters
+    ----------
+    b532: np.array
+        CALIOP L1 attenuated backscatter at 532 nm (rows correspond to height)
+    b1064: np.array
+        CALIOP L1 attenuated backscatter at 1064 nm (rows correspond to height)
+    backscatter_threshold: float (optional)
+        Used to threshold the sum of the 532 and 1064 nm backscatters,
+        default value from Iwabuchi et al. (2012)
+    width_threshold: float (optional)
+        The minimum width of a cloud in meters,
+        default value corresponds to GOES-16 nadir pixel size
+    thickness_threshold: float (optional)
+        The minimum thickness of a cloud in meters
+    area_threshold: float (optional)
+        Minimum area in 'pixels'
+    Returns
+    -------
+    mask: np.array
+        Cloud mask
+    """
+    
+    mask = b532 + b1064 >= backscatter_threshold
+
+    # Returns connected components in the mask
+    ccl = label(mask, connectivity=1)
+    
+    # Loop though connected components
+    to_remove = []
+    for c in regionprops(ccl):
+        
+        # Bounding box of connected component
+        box = c.bbox
+
+        # Get width and thickness in meters
+        width = (box[3] - box[1]) * CALIOP_HORIZONTAL_RESOLUTION
+        thickness = (box[2]-box[0]) * CALIOP_VERTICAL_RESOLUTION
+        
+        # Check threshold conditions
+        conds = [thickness < thickness_threshold,
+                width < width_threshold,
+                c.area < area_threshold]
+
+        if np.any(conds):
+            to_remove.append(c.label)
+    
+    negative_mask = np.isin(ccl, to_remove)
+    updated_mask = mask * (~negative_mask)
+    
+    return updated_mask 
+

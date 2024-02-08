@@ -19,17 +19,6 @@ from .utils import (get_lons, get_lats, get_ortho_ids, get_netcdf_asset,
 from .vertical_feature_mask import get_cirrus_fcf_integers
 
 
-# See https://www.eoportal.org/satellite-missions/calipso#
-# Refers to L1b product resolution
-CALIOP_HORIZONTAL_RESOLUTION = 333 # m
-CALIOP_VERTICAL_RESOLUTION = 30 # m
-
-# See Iwabuchi et al. (2012), section 3.3:
-# https://agupubs.onlinelibrary.wiley.com/doi/full/10.1029/2011JD017020
-BACKSCATTER_THRESHOLD = 0.003 # km^-1 sr^-1
-WIDTH_THRESHOLD = 1000 # meter
-THICKNESS_THRESHOLD = 60 # meter
-
 # Altitude thresholds used in paper
 MINIMUM_ALTITUDE = 8.0 # km
 MAXIMUM_ALTITUDE = 15.0 # km
@@ -46,67 +35,6 @@ COLUMNS = ["Layer_Top_Altitude", "Layer_Base_Altitude",
             "Opacity_Flag", "Feature_Optical_Depth_532",
             "Feature_Optical_Depth_Uncertainty_532", "Ice_Water_Path",
             "Ice_Water_Path_Uncertainty", "Snow_Ice_Surface_Type"]
-
-def apply_cloud_filter(b532, b1064, 
-            backscatter_threshold=BACKSCATTER_THRESHOLD,
-            width_threshold=WIDTH_THRESHOLD, 
-            thickness_threshold=THICKNESS_THRESHOLD, area_threshold=10):
-    """
-    Filters out noise in CALIOP L1 profiles based on thresholding the
-    backscatter values. 
-
-    Default parameters are as suggested by Iwabuchi et al. (2012)
-    
-    Parameters
-    ----------
-    b532: np.array
-        CALIOP L1 attenuated backscatter at 532 nm (rows correspond to height)
-    b1064: np.array
-        CALIOP L1 attenuated backscatter at 1064 nm (rows correspond to height)
-    backscatter_threshold: float (optional)
-        Used to threshold the sum of the 532 and 1064 nm backscatters,
-        default value from Iwabuchi et al. (2012)
-    width_threshold: float (optional)
-        The minimum width of a cloud in meters,
-        default value corresponds to GOES-16 nadir pixel size
-    thickness_threshold: float (optional)
-        The minimum thickness of a cloud in meters
-    area_threshold: float (optional)
-        Minimum area in 'pixels'
-    Returns
-    -------
-    mask: np.array
-        Cloud mask
-    """
-    
-    mask = b532 + b1064 >= backscatter_threshold
-
-    # Returns connected components in the mask
-    ccl = label(mask, connectivity=1)
-    
-    # Loop though connected components
-    to_remove = []
-    for c in regionprops(ccl):
-        
-        # Bounding box of connected component
-        box = c.bbox
-
-        # Get width and thickness in meters
-        width = (box[3] - box[1]) * CALIOP_HORIZONTAL_RESOLUTION
-        thickness = (box[2]-box[0]) * CALIOP_VERTICAL_RESOLUTION
-        
-        # Check threshold conditions
-        conds = [thickness < thickness_threshold,
-                width < width_threshold,
-                c.area < area_threshold]
-
-        if np.any(conds):
-            to_remove.append(c.label)
-    
-    negative_mask = np.isin(ccl, to_remove)
-    updated_mask = mask * (~negative_mask)
-    
-    return updated_mask 
 
 
 def geometricaltitude2pressure(lon, lat, time, h, ds):
@@ -375,8 +303,8 @@ def coarse_collocation(path, get_mask, threshold_dist=50.0, conus=False,
         raise FileNotFoundError("No detections at " \
                             + ", ".join([str(t) for t in times_tried]))
         
-    collocated = (mask==1.0)*collocation_mask
-    
+    collocated = (mask == 1.0) * collocation_mask
+
     # If any contrail pixels found close to the CALIPSO ground track,
     # indicate successful collocation
     if np.sum(collocated) > 0:
