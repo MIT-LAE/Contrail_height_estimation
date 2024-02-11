@@ -8,8 +8,8 @@ import scipy.constants
 from .calipso import CALIPSO
 
 # Central wavelength (in micrometers) of the IIR channels
-# see e.g. Garnier et al. (2021)
-# https://amt.copernicus.org/articles/14/3253/2021/amt-14-3253-2021.pdf
+# Source: Table 2. in Garnier et al. (2018)
+# https://amt.copernicus.org/articles/11/2485/2018/amt-11-2485-2018.pdf
 IIR_CENTRAL_WAVELENGTH = {1 : 8.621, 2 : 10.635, 3 : 12.058}
 
 # Coefficients to convert IIR Level 1b radiances (in W/m2/micrometer/sr)
