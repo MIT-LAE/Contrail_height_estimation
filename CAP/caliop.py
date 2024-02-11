@@ -6,9 +6,9 @@ from pyhdf.SD import SD, SDC
 from pyhdf import HDF, VS
 import skimage.measure
 
-from .geometry import GroundTrack
+from .calipso import CALIPSO
 from .vertical_feature_mask import interpret_vfm
-from .visualization import plot_caliop_profile_direct
+from .visualization import plot_caliop_profile_direct, loadcolormap
 from .interpolation import interp2d_12
 
 PROJECTION_PATH = '/net/d13/data/vmeijer/reprojections/'
@@ -34,11 +34,10 @@ THICKNESS_THRESHOLD = 60 # meter
 
 class CollocationError(Exception):
     """Exception raised for errors with collocation """
-    
     pass
 
 
-class CALIOP:
+class CALIOP(CALIPSO):
     """
     Class to handle CALIOP file I/O
     """
@@ -49,19 +48,8 @@ class CALIOP:
         path : str
             Path to CALIOP L1/L2 HDF file.
         """
+        super().__init__("CALIOP", path)
         
-        self.path = path
-        self.file = SD(self.path, SDC.READ)
-        self.datasets = [ds for ds in self.file.datasets()]
-        self.time_bounds = self.get_time_bounds(UTC=True)
-        self.read_meta_data()
-
-    def __repr__(self):
-        
-        return f'CALIOP object for file: {os.path.basename(self.path)}'
-    
-    def __str__(self):
-        return f'CALIOP object for file: {os.path.basename(self.path)}'
         
     def read_meta_data(self):
         """
@@ -76,127 +64,6 @@ class CALIOP:
         for i, name in enumerate(field_names):
             setattr(self, name, vs_meta[0][i])
         h4.close()
-
-    def get_time_bounds(self, UTC=True):
-        """
-        Obtain initial and final time of CALIOP curtain.
-
-        Parameters
-        ---------
-        UTC : bool (optional)
-            To convert time bounds to UTC or not
-
-        Returns
-        -------
-        time_bounds : List[dt.datetime]
-            Initial and final time of CALIOP curtain
-        """
-        
-        if UTC:
-            time_key = "Profile_UTC_Time"
-        else:
-            time_key = "Profile_Time"
-        raw_time = self.file.select(time_key)[:]
-
-        time_bounds = [self._convert_time(t) for t in [raw_time[0,0], raw_time[-1, -1]]]
-        
-        return time_bounds      
-        
-    def _convert_time(self, t):
-        """
-        Converts CALIPSO time format to python datetime object
-        Based on function found at: https://github.com/peterkuma/ccplot/blob/master/bin/ccplot
-
-        Parameters
-        ----------
-        t : int
-            CALIPSO time format integer
-        
-        Returns
-        -------
-        time : dt.datetime
-            Datetime object corresponding to CALIPSO time
-        """
-            
-        d = int(t % 100)
-        m = int((t-d) % 10000)
-        y = int(t-m-d)
-
-        return dt.datetime(2000 + y//10000, m//100, d) + dt.timedelta(t % 1)
-    
-    def get_time(self, UTC=True):
-        """
-        Get time dataset of .hdf file and convert to datetime objects.
-
-        Parameters
-        ---------
-        UTC : bool (optional)
-            To convert time bounds to UTC or not
-
-        Returns
-        -------
-        time : np.array
-            Array of datetime values
-        """ 
-
-        if UTC:
-            time_key = "Profile_UTC_Time"
-        else:
-            time_key = "Profile_Time"
-            
-        raw_time = self.file.select(time_key)[:]
-        result = [self._convert_time(t) for t in raw_time.flatten()]
-
-        return np.array(result).reshape(raw_time.shape)
-    
-    def available_dataset_names(self):
-        """
-        Lists available HDF datasets
-        """
-        return self.datasets
-    
-    def get_ground_track(self, n_segments=5):
-        lons = self.get("Longitude")[:,0]
-        lats = self.get("Latitude")[:,0]
-        return GroundTrack(lons, lats, n_segments=n_segments)
-
-    
-    def get(self, dataset, with_units=False):
-        """
-        Get dataset of .hdf file and fill values if applicable.
-
-        Parameters
-        ----------
-        dataset : str
-            The dataset name
-        with_units : bool (optional)
-            Returns the dataset units as well
-
-        Returns
-        -------
-        data : np.array
-            Dataset data
-        units : str (optional)
-            Dataset units
-        """ 
-        
-        if dataset not in self.datasets:
-            raise KeyError(f"No dataset found corresponding to {dataset}")
-
-        if not with_units:
-            
-            # If there is a fillvalue, use this 
-            try:
-                fill_value = self.file.select(dataset).fillvalue
-                return np.ma.masked_equal(self.file.select(dataset)[:],
-                                            fill_value)
-
-            except:
-                return self.file.select(dataset)[:]
-     
-        else:
-            fill_value = self.file.select(dataset).fillvalue
-            return np.ma.masked_equal(self.file.select(dataset)[:], fill_value), self.file.select(dataset)["units"]
 
     def is_ascending(self):
         """
@@ -233,12 +100,12 @@ class CALIOP:
         """
 
         # Extract longitudes, latitudes and UTC times
-        lons = caliop.get("Longitude")
-        lats = caliop.get("Latitude")
-        times = caliop.get_time()
+        lons = self.get("Longitude")
+        lats = self.get("Latitude")
+        times = self.get_time()
         
         # Extract data
-        data = caliop.get(dataset)
+        data = self.get(dataset)
 
         if len(data.shape) != 2:
             raise ValueError("Dataset must be 2D")
@@ -249,8 +116,8 @@ class CALIOP:
         subset_data = data[subset_mask[:,0], :]
         
         if return_coords:
-            return subset_data, lons[subset_mask], lats[subset_mask],
-                    times[subset_mask]
+            return (subset_data, lons[subset_mask], lats[subset_mask],
+                    times[subset_mask])
             
         else:
             return subset_data
@@ -290,7 +157,7 @@ class CALIOP:
                                                     ve2=ve2, vres=vres)
         
         if return_coords:
-            return interpolated, sub_lons, sub_lats, sub_times
+            return interpolated_subset, sub_lons, sub_lats, sub_times
         else:
             return interpolated_subset
         
@@ -298,7 +165,7 @@ class CALIOP:
             width_threshold=WIDTH_THRESHOLD, 
             thickness_threshold=THICKNESS_THRESHOLD, area_threshold=10,
             return_backscatters=False, ve1=0.0, ve2=40.0,
-            vres=CALIOP_VERTICAL_RESOLUTION):
+            vres=CALIOP_VERTICAL_RESOLUTION, **kwargs):
         """
         Filters out noise in CALIOP L1 profiles based on thresholding the
         backscatter values. 
@@ -390,7 +257,8 @@ class CALIOP:
         else:
             rows = np.where((lats[:,2] >= lat_min)*(lats[:,0] <= lat_max))[0]
 
-        # Filter rows based on feature classification flags and extinction quality control
+        # Filter rows based on feature classification flags and extinction
+        # quality control
         rows_to_keep = []
         for r in rows[~top_alts.mask[rows, 0]]:
             fcf = fcfs[r, 0]
@@ -410,6 +278,10 @@ class CALIOP:
 
         return rows_to_keep
     
+    def get_backscatter_cmap(self):
+
+        return loadcolormap(os.path.join(os.path.dirname(__file__), "assets",
+                                        "calipso-backscatter.cmap"), "")
 
     def get_extent(self):
 
@@ -430,7 +302,8 @@ class CALIOP:
     
 
     def plot_backscatter(self, wavelength=532,
-                        cloud_filter=False, fig=None, ax=None, extent=None, **kwargs):
+                        cloud_filter=False, fig=None, ax=None, extent=None,
+                        **kwargs):
         if wavelength not in [532, 1064]:
             raise ValueError("Choose one of 532, 1064 for wavelength")
 
@@ -495,7 +368,7 @@ def filter_cirrus_feature(fcf):
     
 def interpolate_caliop_profile(data, lidar_alts=CALIOP_ALTITUDES,
                         ve1=np.min(CALIOP_ALTITUDES),
-                        ve1=np.max(CALIOP_ALTITUDES),
+                        ve2=np.max(CALIOP_ALTITUDES),
                         vres=CALIOP_VERTICAL_RESOLUTION):
     """
     Interpolates a CALIOP L1 dataset to a regular grid.
@@ -575,18 +448,18 @@ def get_cloud_mask_from_backscatters(b532, b1064,
     mask = b532 + b1064 >= backscatter_threshold
 
     # Returns connected components in the mask
-    ccl = label(mask, connectivity=1)
+    ccl = skimage.measure.label(mask, connectivity=1)
     
     # Loop though connected components
     to_remove = []
-    for c in regionprops(ccl):
+    for c in skimage.measure.regionprops(ccl):
         
         # Bounding box of connected component
         box = c.bbox
 
         # Get width and thickness in meters
         width = (box[3] - box[1]) * CALIOP_HORIZONTAL_RESOLUTION
-        thickness = (box[2]-box[0]) * CALIOP_VERTICAL_RESOLUTION
+        thickness = (box[2] - box[0]) * CALIOP_VERTICAL_RESOLUTION
         
         # Check threshold conditions
         conds = [thickness < thickness_threshold,
