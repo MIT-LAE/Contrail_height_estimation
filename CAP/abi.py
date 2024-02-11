@@ -481,7 +481,7 @@ def find_closest_ABI_product(caliop_time, ABI_FD_row, ABI_FD_col):
                                                 ABI_CONUS_row].values
 
     # Now we find the closest product by computing the time-deltas with the
-    # pixel capture times of eaach of the products
+    # pixel capture times of each of the products
     product_time_deltas = {}
     for product, product_rel_time in product_rel_times.items():
     
@@ -498,7 +498,6 @@ def find_closest_ABI_product(caliop_time, ABI_FD_row, ABI_FD_col):
         # product pixel time and the `caliop_time`
         product_time_deltas[product] = abs((product_rel_time \
                                     - caliop_rel_time) / np.timedelta64(1,'s'))
-
     closest_product = min(product_time_deltas, key=product_time_deltas.get)
     product_time = fd_time
     if "CONUS" in closest_product:
