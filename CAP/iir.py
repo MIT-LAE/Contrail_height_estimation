@@ -7,7 +7,18 @@ import scipy.constants
 
 from .calipso import CALIPSO
 
+# Central wavelength (in micrometers) of the IIR channels
+# see e.g. Garnier et al. (2021)
+# https://amt.copernicus.org/articles/14/3253/2021/amt-14-3253-2021.pdf
 IIR_CENTRAL_WAVELENGTH = {1 : 8.621, 2 : 10.635, 3 : 12.058}
+
+# Coefficients to convert IIR Level 1b radiances (in W/m2/micrometer/sr)
+# to brightness temperatures (in Kelvin)
+# Source: Table 2. in Garnier et al. (2018)
+# https://amt.copernicus.org/articles/11/2485/2018/amt-11-2485-2018.pdf
+# BT = a0 + (1 + a1) * BT_planck(radiance, central_avelength) 
+# units a0: K
+# units a1: None
 IIR_A0 = {1 : -0.768212, 2 : -0.302290, 3 : -0.466275}
 IIR_A1 = {1 : 0.002729, 2 : 0.001314, 3 : 0.002299}
 
@@ -38,6 +49,9 @@ def get_IIR_BT(radiances, channel):
     Obtain the brightness temperature for an Imaging Infrared Radiometer (IIR)
     channel.
     
+    Based on equation 3 in Garnier et al. (2018):
+    https://amt.copernicus.org/articles/11/2485/2018/amt-11-2485-2018.pdf
+    
     Parameters
     ----------
     radiances : np.array
@@ -50,9 +64,9 @@ def get_IIR_BT(radiances, channel):
     BTs : np.array
         Brightness temperatures in Kelvin
     """
-    
-    return IIR_A0[channel] + (1 + IIR_A1[channel]) \
-        * get_brightness_temperature(radiances, IIR_CENTRAL_WAVELENGTH[channel])
+    BT_planck = get_brightness_temperature(radiances,
+        IIR_CENTRAL_WAVELENGTH[channel])
+    return IIR_A0[channel] + (1 + IIR_A1[channel]) * BT_planck
     
     
 def get_brightness_temperature(I, lamda):
