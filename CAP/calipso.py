@@ -2,6 +2,7 @@
 Base class for CALIPSO instrument dataset processing
 """
 import os
+import datetime as dt
 
 import numpy as np
 from pyhdf.SD import SD, SDC
