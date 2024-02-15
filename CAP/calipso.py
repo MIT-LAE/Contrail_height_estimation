@@ -136,17 +136,27 @@ class CALIPSO:
         if dataset not in self.datasets:
             raise KeyError(f"No dataset found corresponding to {dataset}")
 
-        if not with_units:
-            
-            # If there is a fillvalue, use this 
-            try:
-                fill_value = self.file.select(dataset).fillvalue
-                return np.ma.masked_equal(self.file.select(dataset)[:], fill_value)
+        # Get dataset attributes
+        attributes = self.file.select(dataset).attributes()
+        scale_factor = attributes.get("scale_factor", 1.0)
+        add_offset = attributes.get("offset", 0.0)
+        
+        output = self.file.select(dataset)[:]
 
-            except:
-                return self.file.select(dataset)[:]
-     
+        # If fill value is present, mask it
+        if "fillvalue" in attributes.keys():
+            fill_value = attributes["fillvalue"]
+            output = np.ma.masked_equal(output, fill_value)
+
+        # Scale and offset the dataset
+        # See dataset user's guide on https://www-calipso.larc.nasa.gov/
+        # for the IIR L1 product for the source of this equation
+        # also valid for CALIOP L1 and L2 products (which have scale factors
+        # of unity and zero offsets).
+        output = (output / scale_factor) + add_offset
+        
+        if with_units:
+            units = attributes.get("units", None)
+            return output, units
         else:
-            fill_value = self.file.select(dataset).fillvalue
-            return np.ma.masked_equal(self.file.select(dataset)[:], fill_value), self.file.select(dataset)["units"]
-
+            return output
