@@ -23,6 +23,7 @@ IIR_A0 = {1 : -0.768212, 2 : -0.302290, 3 : -0.466275}
 IIR_A1 = {1 : 0.002729, 2 : 0.001314, 3 : 0.002299}
 
 
+
 def planck_function(T, wavelength):
     """
     Evaluates the Planck function, which returns the radiance of a blackbody
@@ -43,7 +44,7 @@ def planck_function(T, wavelength):
     # For brevity
     h = scipy.constants.h
     c = scipy.constants.c
-    
+
     num = 2 * h * c**2 / wavelength**5
     den = np.exp(h * c / (wavelength * scipy.constants.k*T)) - 1
 
@@ -70,30 +71,38 @@ def get_IIR_BT(radiances, channel):
     BTs : np.array
         Brightness temperatures in Kelvin
     """
-    BT_planck = get_brightness_temperature(radiances,
-        IIR_CENTRAL_WAVELENGTH[channel])
+    # 1e-6 is to convert wavelength from micron to meters
+    BT_planck = get_brightness_temperature(radiances * 1e-6,
+        IIR_CENTRAL_WAVELENGTH[channel] * 1e-6)
     return IIR_A0[channel] + (1 + IIR_A1[channel]) * BT_planck
     
     
-def get_brightness_temperature(I, lamda):
+def get_brightness_temperature(I, wavelength):
     """
     Obtains the temperature for a blackbody emitting radiance `I` at 
-    wavelength `lamda`.
+    wavelength `wavelength`.
 
     Parameters
     ----------
     I: float
-        Radiance in W/m2/micrometer/sr
-    lamda: float
-        Wavelength in micrometers
+        Radiance in W/m2/meter/sr
+    wavelength: float
+        Wavelength in meters
 
     Returns
     -------
     T: float
         Brightness temperature in Kelvin
     """
-    lamda = lamda * 1e-6
-    return scipy.constants.h * scipy.constants.c / (lamda * scipy.constants.k * np.log(1 + 2 * scipy.constants.h * scipy.constants.c**2 / (lamda**5 * I)))
+    # For brevity
+    h = scipy.constants.h
+    c = scipy.constants.c
+
+    num = h * c
+    den = wavelength * scipy.constants.k * np.log(1 + 2 * h * c**2 \
+            / (wavelength**5 * I))
+    
+    return num / den
 
 
 class IIR(CALIPSO):
