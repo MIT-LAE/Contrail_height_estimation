@@ -1,4 +1,5 @@
 import numpy as np
+import pytest
 
 from CAP.iir import planck_function, get_brightness_temperature
 
@@ -20,3 +21,10 @@ def test_get_brightness_temperature():
 
     BT = get_brightness_temperature(values, lamdas * 1e-6)
     np.testing.assert_allclose(BT, T, rtol=0.1)
+
+@pytest.mark.parametrize("T", np.arange(100, 1000, 100))
+def test_planck_function_and_brightness_temperature(T):
+    wavelength = 10e-6
+    I = planck_function(T, wavelength)
+    BT = get_brightness_temperature(I, wavelength)
+    assert pytest.approx(T) == BT

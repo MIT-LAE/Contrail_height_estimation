@@ -23,7 +23,6 @@ IIR_A0 = {1 : -0.768212, 2 : -0.302290, 3 : -0.466275}
 IIR_A1 = {1 : 0.002729, 2 : 0.001314, 3 : 0.002299}
 
 
-
 def planck_function(T, wavelength):
     """
     Evaluates the Planck function, which returns the radiance of a blackbody
@@ -50,37 +49,11 @@ def planck_function(T, wavelength):
 
     return num / den
 
-
-def get_IIR_BT(radiances, channel):
-    """
-    Obtain the brightness temperature for an Imaging Infrared Radiometer (IIR)
-    channel.
-    
-    Based on equation 3 in Garnier et al. (2018):
-    https://amt.copernicus.org/articles/11/2485/2018/amt-11-2485-2018.pdf
-    
-    Parameters
-    ----------
-    radiances : np.array
-        Radiance in W/m2/micrometer/sr
-    channel : int
-        Channel, in [1, 2, 3]
-    
-    Returns
-    -------
-    BTs : np.array
-        Brightness temperatures in Kelvin
-    """
-    # 1e-6 is to convert wavelength from micron to meters
-    BT_planck = get_brightness_temperature(radiances * 1e-6,
-        IIR_CENTRAL_WAVELENGTH[channel] * 1e-6)
-    return IIR_A0[channel] + (1 + IIR_A1[channel]) * BT_planck
-    
     
 def get_brightness_temperature(I, wavelength):
     """
     Obtains the temperature for a blackbody emitting radiance `I` at 
-    wavelength `wavelength`.
+    wavelength `wavelength`. Solves the Planck function for temperature.
 
     Parameters
     ----------
@@ -99,7 +72,7 @@ def get_brightness_temperature(I, wavelength):
     c = scipy.constants.c
 
     num = h * c
-    den = wavelength * scipy.constants.k * np.log(1 + 2 * h * c**2 \
+    den = wavelength * scipy.constants.k * np.log(1 + 2 * h * c**2
             / (wavelength**5 * I))
     
     return num / den
@@ -120,43 +93,57 @@ class IIR(CALIPSO):
         
         self.path = path
 
-   
-def get_IIR_image(caliop, extent, channel=1, return_coords=True):
-    
-    l1_path = caliop.path
+    def get_BT_image(self, extent, channel=1, return_coords=True):
+        """
+        Returns a IIR brightness temperature image
 
-    if "2021" in l1_path or "2022" in l1_path:
-        v = "V2-01"
-    else:
-        v = "V2-00"
-    
-    iir_path = "/net/d15/data/vmeijer/IIR_L1/" + os.path.basename(
-    l1_path.replace("CALIOP_L1", "IIR_L1").replace("V4-51", v).replace("V4-10", v).replace("V4-11", v).replace("LID", "IIR").replace("_Subset.hdf",".hdf").replace("ValStage1-V3-41", "Standard-V2-01"))
-      
-    try:
-        iir = IIR(iir_path)
-    except Exception as e:
-        print(f"Something wrong with file at {iir_path}")
-        raise e
+        Parameters
+        ----------
+        extent : List[float]
+            Geodetic extent, [lon_min, lon_max, lat_min, lat_max]
+        channel : int, optional
+            IIR channel to return, in [1, 2, 3], by default 1
+        return_coords : bool, optional
+            Whether to return the coordinates associated with the pixels in
+            the image, by default True
+        
+        Returns
+        -------
+        BTs : np.array
+            Brightness temperatures in Kelvin
+        """
+        if channel not in [1, 2, 3]:
+            raise ValueError("Channel must be in [1, 2, 3]")
+        
+        lons = self.get("Longitude")
+        lats = self.get("Latitude")
+        mask = (lons >= extent[0]) * (lons <= extent[1]) \
+                * (lats >= extent[2]) * (lats <= extent[3])
 
-    iir_lons = iir.get("Longitude")
-    iir_lats = iir.get("Latitude")
-    mask = (iir_lons >= extent[0])*(iir_lons <= extent[1]) * (iir_lats >= extent[2]) * (iir_lats <= extent[3])
+        # Determine which swath rows are within the geodetic extent
+        row_mask = np.where(mask.sum(axis=1) > 0)[0]
 
-    row_mask = np.arange(mask.shape[0])
-    row_mask = row_mask[~np.isin(row_mask, np.where(mask.sum(axis=1) == 0)[0])]
+        # Subset longitudes and latitudes
+        lons = lons[row_mask,:]
+        lats = lats[row_mask,:]
 
+        # Get the dataset name corresponding to the IIR channel
+        dset_name = "Calibrated_Radiances_"\
+                        + ["8.65", "10.6", "12.05"][channel - 1]
 
-    iir_lons = iir_lons[row_mask,:]
-    iir_lats = iir_lats[row_mask,:]
+        # Get the radiances, which are in units of W/m2/micrometer/sr
+        radiances = self.get(dset_name)[row_mask,:]
 
-    rad_name = ["8.65", "10.6", "12.05"][channel-1]
+        # 1e-6 is to convert wavelength from micron to meters
+        # 1e6 converts radiances from W/m2/micrometer/sr to W/m2/meter/sr
+        BT_planck = get_brightness_temperature(radiances * 1e6,
+                        IIR_CENTRAL_WAVELENGTH[channel] * 1e-6)
 
-    rads = iir.get("Calibrated_Radiances_"+rad_name)[row_mask,:]
-    
-    # The 1000 is the scale factor
-    BTs = get_IIR_BT(1000*rads.data.astype(np.float64), channel)
-    if return_coords:
-        return BTs, iir_lons, iir_lats
-    else:
-        return BTs
+        # equation 3 in Garnier et al. (2018):
+        # https://amt.copernicus.org/articles/11/2485/2018/amt-11-2485-2018.pdf
+        BTs = IIR_A0[channel] + (1 + IIR_A1[channel]) * BT_planck
+                
+        if return_coords:
+            return BTs, lons, lats
+        else:
+            return BTs
