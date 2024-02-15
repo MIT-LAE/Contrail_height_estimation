@@ -23,7 +23,7 @@ IIR_A0 = {1 : -0.768212, 2 : -0.302290, 3 : -0.466275}
 IIR_A1 = {1 : 0.002729, 2 : 0.001314, 3 : 0.002299}
 
 
-def planck_function(T, lamda):
+def planck_function(T, wavelength):
     """
     Evaluates the Planck function, which returns the radiance of a blackbody
     at the given temperature and wavelength.
@@ -32,16 +32,22 @@ def planck_function(T, lamda):
     ----------
     T: float
         Temperature in Kelvin
-    lamda: float
-        Wavelength in micrometers
+    wavelength: float
+        Wavelength in meters
 
     Returns
     -------
     B: float
-        Radiance in W/m^2/steradian/micrometer
+        Radiance in W/m^2/steradian/meter
     """
-    return 2*((scipy.constants.h*scipy.constants.c**2)/((lamda*1e-6)**5))*\
-                1/(np.exp(scipy.constants.h * scipy.constants.c / ((lamda*1e-6)*scipy.constants.k*T)) -1 )
+    # For brevity
+    h = scipy.constants.h
+    c = scipy.constants.c
+    
+    num = 2 * h * c**2 / wavelength**5
+    den = np.exp(h * c / (wavelength * scipy.constants.k*T)) - 1
+
+    return num / den
 
 
 def get_IIR_BT(radiances, channel):
