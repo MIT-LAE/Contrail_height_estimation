@@ -4,7 +4,7 @@ https://github.com/ErickShepherd/modis_caliop_anomaly_analysis/
 
 I have switched around keys of aerosol and cloud categories in the
 FEATURE_SUBTYPE dictionary, as I believe these were incorrect in the original
-file.
+file. I have also increased the number of comments.
 
 All definitions are based on the following source:
 CALIPSO Data Products Catalog
@@ -154,33 +154,38 @@ def get_fcf_bitstring(feature_type, feature_type_qa, ice_water_phase,
     """
     
     def find_key(d, vq):
-        
-        for k, v  in d.items():
-            if v == vq:
-                return k
-        return None
+        try:
+            return list(d.keys())[list(d.values()).index(vq)]
+        # Value not in dictionary
+        except ValueError:
+            return None
     
+    # Do `FEATURE_TYPE` first so that we know the FEATURE_SUBTYPE dict to
+    # include
+    integers = [find_key(FEATURE_TYPE, feature_type)]
     
-    bitstring = ""
-    
-    feature_type_int = find_key(FEATURE_TYPE, feature_type)
-    feature_type_qa_int = find_key(FEATURE_TYPE_QA, feature_type_qa)
-    ice_water_phase_int = find_key(ICE_WATER_PHASE, ice_water_phase)
-    ice_water_phase_qa_int = find_key(ICE_WATER_PHASE_QA, ice_water_phase_qa)
-    feature_subtype_int = find_key(FEATURE_SUBTYPE[feature_type_int], feature_subtype)
-    cloud_aerosol_type_qa_int = find_key(CLOUD_AEROSOL_TYPE_QA, cloud_aerosol_type_qa)
-    horizontal_averaging_int = find_key(HORIZONTAL_AVERAGING, horizontal_averaging)
-    
-    integers = [horizontal_averaging_int, cloud_aerosol_type_qa_int, feature_subtype_int,
-                ice_water_phase_qa_int, ice_water_phase_int, feature_type_qa_int, feature_type_int]
-    
-   
+    dicts = [FEATURE_TYPE_QA, ICE_WATER_PHASE, ICE_WATER_PHASE_QA,
+            FEATURE_SUBTYPE[integers[0]], CLOUD_AEROSOL_TYPE_QA,
+            HORIZONTAL_AVERAGING]
+    vals = [feature_type_qa, ice_water_phase, ice_water_phase_qa,
+            feature_subtype, cloud_aerosol_type_qa, horizontal_averaging]
+    for (d, vq) in zip(dicts, vals):
+        integers.append(find_key(d, vq))
+
+    # Reverse integers so that the first element is the first bit
+    integers = integers[::-1]
+
+    # Number of bits for each 'section' of the bitstring.
+    # Based on CALIPSO Data Products Catalog Table 92
     lengths = [3, 1, 3, 2, 2, 2, 3]
+
+    bitstring = ""
     for integer, length in zip(integers, lengths):
         
+        # Convert integer to binary, remove '0b' using [2:] and pad with
+        # zeros to the correct length.
         bitstring += bin(integer)[2:].zfill(length)
         
-    
     return bitstring
     
     
