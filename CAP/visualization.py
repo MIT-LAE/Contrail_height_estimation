@@ -9,7 +9,6 @@ import matplotlib.pyplot as plt
 from mpl_toolkits.axes_grid1.anchored_artists import AnchoredSizeBar
 import matplotlib.patches as patches
 
-
 # Default time locator and formatter settings for class `TimeLocator`
 TIMELOCATOR_STEPS = [1, 2, 5, 10, 15, 30, 300, 600, 900]
 TIMELOCATOR_MINORSTEPS = [0.2, 0.5, 1, 2, 3, 5, 10, 60, 120, 300]
@@ -28,7 +27,6 @@ class TimeLocator(mpl.ticker.Locator):
         self.minorsteps = np.array(minorsteps, np.float64)
         self.minorlocs = [] 
         
-        
     def __call__(self):
         
         vmin, vmax = self.axis.get_view_interval()
@@ -36,24 +34,24 @@ class TimeLocator(mpl.ticker.Locator):
         
         # Time difference
         time_diff = self.time[vmax] - self.time[vmin]
-        second_diff = time_diff.days*3600*24 + time_diff.seconds \
-                        + time_diff.microseconds*10e-6
+        second_diff = time_diff.days * 3600 * 24 + time_diff.seconds \
+                        + time_diff.microseconds * 10e-6
         if second_diff < 0:
             second_diff *= -1
         
-        ratio = 1.0 *(vmax-vmin)/second_diff
+        ratio = 1.0 *(vmax - vmin) / second_diff
         
         time0 = self.time[vmin]
         
-        offset = -ratio*(time0.microsecond * 10e-6 + \
-                         time0.second + \
-                         time0.minute*60 -0.2)
+        offset = - ratio * (time0.microsecond * 10e-6\
+                            + time0.second\
+                            + time0.minute * 60 - 0.2)
         
         stepdiffs = self.steps - second_diff/self.n
         np.place(stepdiffs, stepdiffs<0, np.inf)
         i = stepdiffs.argmin()
-        base = ratio*self.steps[i]
-        minorbase = ratio*self.minorsteps[i]
+        base = ratio * self.steps[i]
+        minorbase = ratio * self.minorsteps[i]
         
         offset = offset % base
         self.minorlocs = np.arange(vmin + offset - base, vmax + offset + base,
@@ -86,7 +84,6 @@ class TimeFormatter(mpl.ticker.Formatter):
         return self.time[i].strftime("%H:%M:%S")
 
 
-
 def new_axes(fig, x, y, width, height, padding=1.0):
     """
     Source: https://github.com/peterkuma/ccplot/blob/master/bin/ccplot
@@ -99,6 +96,7 @@ def new_axes(fig, x, y, width, height, padding=1.0):
 
     resize_figure(fig, figw, figh)
     return fig.add_axes([x/figw, 1-(y+height)/figh, width/figw, height/figh])
+
 
 def resize_figure(fig, figw, figh):
     """
@@ -145,7 +143,6 @@ def fit_colorbar(fig, axes, aspect=0.03, space=0.4, padding=0.0):
         
 def loadcolormap(filename, name):
     """"
-
     Source: https://github.com/peterkuma/ccplot/blob/master/bin/ccplot
 
     Returns a tuple of matplotlib colormap, matplotlib norm,
@@ -264,6 +261,7 @@ def lat2str(latf, degree=""):
     if latf >= 0.0: return "%.2f%sN" % (latf, degree)
     else: return "%.2f%sS" % (-latf, degree)
 
+
 def setup_lonlat_axes(fig, axes, lon, lat, axis="x"):
     """
     Source: https://github.com/peterkuma/ccplot/blob/master/bin/ccplot
@@ -333,17 +331,51 @@ class SciFormatter(mpl.ticker.Formatter):
         else: return "%.1f" % (x,)
 
 
-def plot_caliop_profile_direct(fig, ax, lons, lats, times, data, min_alt=0.0,
+def plot_caliop_curtain(fig, ax, lons, lats, times, data, min_alt=0.0,
                                 max_alt=40.0,
                                 colorbar=False, dist_axis=False, rotate=False,
                                 add_scalebar=False, **kwargs):
-   
+    """
+    Plot a CALIOP curtain, i.e. a 2D array of data with time and altitude
+    as axes. The data is plotted as a color map.
 
+    Parameters
+    ----------
+    fig : mpl.Figure
+        Figure instance
+    ax : mpl.Axes
+        Axes instance
+    lons : np.array
+        Array of longitudes, length equal to number of columns in `data`
+    lats : np.array
+        Array of latitudes, length equal to number of columns in `data`
+    times : np.array
+        Array of times, length equal to number of columns in `data`
+    data : np.array
+        2D array of data, rows correspond to altitude dimension
+    min_alt : float
+        Minimum altitude to plot, in km
+    max_alt : float
+        Maximum altitude to plot, in km
+    colorbar : bool
+        Whether to plot a colorbar
+    dist_axis : bool
+        Whether to plot an additional horizontal axis with the distance
+        traversed since the first profile within the curtain
+    rotate : bool
+        Whether to rotate the plot 90 degrees. Default is False, 
+        corresponding to the altitude axis being vertical.
+    add_scalebar : bool
+        Whether to add a scalebar to the plot, which can be used to estimate
+        the distance between profiles.
+    """
+    
+    # Load standard CALIPSO backscatter colormap
     if kwargs.get("cmap", None) is None: 
-
         cmap_path = os.path.join(os.path.dirname(__file__),
                     "assets/calipso-backscatter.cmap")
         cmap, norm, ticks = loadcolormap(cmap_path, "CALIOP")
+    # Use user-specified colormap
     else:
         cmap = kwargs.get("cmap")
         norm = kwargs.get("norm")
@@ -351,167 +383,131 @@ def plot_caliop_profile_direct(fig, ax, lons, lats, times, data, min_alt=0.0,
 
     ve1 = min_alt
     ve2 = max_alt
+
     if rotate:
+        data = data.T[::-1,:]
+        im_extent = (ve2, ve1, 0, data.shape[1])
+    else
+        im_extent = (0, data.shape[1], ve1, ve2)
 
-        im = ax.imshow(data.T[::-1,:], cmap=cmap, norm=norm,
-                        extent=(ve2, ve1, 0, data.shape[1]))
+    im = ax.imshow(data, cmap=cmap, norm=norm, extent=im_extent,
+                    interpolation='nearest')
+    ax.set_aspect('auto')
 
-        ax.set_aspect('auto')
-        
-        diff =  (times[-1] - times[0])
-        nseconds = diff.days*24*3600 + diff.seconds
-        
-        x, y, width, height = get_axes_bounds(fig, ax) 
-        figw, figh = fig.get_size_inches()
-        
-        # Configure time axis
+    # Get fig and ax dimensions
+    x, y, width, height = get_axes_bounds(fig, ax) 
+    figw, figh = fig.get_size_inches()
+
+    # Set up time axis
+    diff = (times[-1] - times[0])
+    nseconds = diff.days * 24 * 3600 + diff.seconds
+    
+    if rotate:
         ax.set(ylabel="Time (UTC)")
-        ax.yaxis.set_minor_locator(TimeMinorLocator())
-        ax.yaxis.set_major_locator(TimeLocator(5, times))
-        ax.yaxis.set_major_formatter(TimeFormatter(times))
-        
-        
+        time_axis = ax.yaxis
+    else:
+        ax.set(xlabel="Time (UTC)")
+        time_axis = ax.xaxis
+    
+    time_axis.set_minor_locator(TimeMinorLocator())
+    time_axis.set_major_locator(TimeLocator(5, times))
+    time_axis.set_major_formatter(TimeFormatter(times))
+
+    # Rotate axis labels if plot is rotated
+    if rotate:
         for label in ax.yaxis.get_ticklabels():
             label.set_x(-0.05/figw)
             label.set_rotation("horizontal")
-
-        ax.yaxis.get_label().set_rotation('vertical')
-        
-        
-        # Configure height axis
-        ax.set_xlabel("Altitude (km)")
-        
-        majorticksbases = np.array([0.5, 1, 2, 5])
-        minorticksbases = np.array([0.1, 0.2, 0.5, 1])
-        height_per_tick = (ve2-ve1)/(height/(12*2/72.0))
-        
-        i = np.argmin(np.abs(majorticksbases - height_per_tick))
-        minor_locator = mpl.ticker.MultipleLocator(minorticksbases[i])
-        major_locator = mpl.ticker.MultipleLocator(majorticksbases[i])
-        ax.xaxis.set_minor_locator(minor_locator)
-        ax.xaxis.set_major_locator(major_locator)
-
+        time_axis.get_label().set_rotation('vertical')
+    
+    else:
+        for line in ax.xaxis.get_ticklines() + ax.xaxis.get_minorticklines():
+            line.set_marker(mpl.lines.TICKDOWN)
         for label in ax.xaxis.get_ticklabels():
             label.set_y(-0.05/figh)
+    
+    # Configure altitude axis
+    if rotate:
+        ax.set_xlabel("Altitude (km)")
+        alt_axis = ax.xaxis
+    else:
+        ax.set_ylabel("Altitude (km)")
+        alt_axis = ax.yaxis
+    
+    majorticksbases = np.array([0.5, 1, 2, 5])
+    minorticksbases = np.array([0.1, 0.2, 0.5, 1])
 
-        for line in ax.xaxis.get_ticklines()+ax.xaxis.get_minorticklines():
+    # TODO : what are these numbers?
+    height_per_tick = (ve2-ve1)/(height/(12*2/72.0))
+    
+    i = np.argmin(np.abs(majorticksbases - height_per_tick))
+    minor_locator = mpl.ticker.MultipleLocator(minorticksbases[i])
+    major_locator = mpl.ticker.MultipleLocator(majorticksbases[i])
+    alt_axis.set_minor_locator(minor_locator)
+    alt_axis.set_major_locator(major_locator)
+
+    for label in alt_axis.get_ticklabels():
+        if rotate:
+            label.set_y(-0.05/figh)
+        else:
+            label.set_x(-0.05/figw)
+
+    for line in alt_axis.get_ticklines() + alt_axis.get_minorticklines():
+        if rotate:
             line.set_marker(mpl.lines.TICKDOWN)
+        else:
+            line.set_marker(mpl.lines.TICKRIGHT)
+    
+    # Hide ticks on the top and right-hand side.
 
-        # Hide ticks on the top and right-hand side.
-        for tick in ax.xaxis.get_major_ticks() + \
-                    ax.yaxis.get_major_ticks() + \
-                    ax.xaxis.get_minor_ticks() + \
-                    ax.yaxis.get_minor_ticks():
-            tick.tick1line.set_visible(True)
-            tick.label1.set_visible(True)
-            tick.tick2line.set_visible(False)
-            tick.label2.set_visible(False)
-        
-        
-        
-        if colorbar:
-            cbaxes = fit_colorbar(fig, ax, space=0.4, padding=1.0)
-            cb = fig.colorbar(im, ax=ax, cax=cbaxes, orientation="horizontal",
-                            extend="both", ticks=ticks)
+    for tick in ax.xaxis.get_major_ticks() + \
+                ax.yaxis.get_major_ticks() + \
+                ax.xaxis.get_minor_ticks() + \
+                ax.yaxis.get_minor_ticks():
+        tick.tick1line.set_visible(True)
+        tick.label1.set_visible(True)
+        tick.tick2line.set_visible(False)
+        tick.label2.set_visible(False)
+            
 
-            #cb.set_label(dataset_name)
-            cb.ax.tick_params(direction="in")
+    if colorbar:
+        cbaxes = fit_colorbar(fig, ax, space=0.4, padding=1.0)
+        orientation = "horizontal" if rotate else "vertical"
+        cb = fig.colorbar(im, ax=ax, cax=cbaxes, orientation=orientation,
+                        extend="both", ticks=ticks)
 
-            for label in cb.ax.get_yticklabels():
-                label.set_fontsize(8)
+        cb.ax.tick_params(direction="in")
+        for label in cb.ax.get_yticklabels():
+            label.set_fontsize(8)
 
-        setup_lonlat_axes(fig, ax, lons, lats, axis='y')
 
-        if add_scalebar:         
-            ## Add size bar
+    if dist_axis:
+        if not rotate:
+            setup_dist_axes(fig, ax, times)
+        else:
+            raise NotImplementedError(("Distance axis not implemented for "
+                                    "rotated plots"))
+    
+    
+    setup_lonlat_axes(fig, ax, lons, lats, axis='y' if rotate else 'x')
+
+    # TODO: what are these numbers?
+    if add_scalebar:
+        if not rotate:
             ax.add_patch(patches.Rectangle([14.0, 0], height=100+2*33.3,
                                             width=1.0, facecolor="w"))
             ax.plot([14.3, 14.3], [50, 50+2*33.3], c="k")
             ax.text(14.3, 50+33.3, "20 km", ha="right", va="center",
                     rotation=90, c="k", fontsize=6)
         
-    else:
-        im = ax.imshow(data, cmap=cmap, norm=norm,
-                        extent=(0, data.shape[1], ve1, ve2),
-                        interpolation='nearest')
-        
-        ax.set_aspect('auto')
-        
-        diff =  (times[-1] - times[0])
-        nseconds = diff.days*24*3600 + diff.seconds
-        
-        x, y, width, height = get_axes_bounds(fig, ax) 
-        figw, figh = fig.get_size_inches()
-        
-        # Configure time axis
-        ax.set(xlabel="Time (UTC)")
-        ax.xaxis.set_minor_locator(TimeMinorLocator())
-        ax.xaxis.set_major_locator(TimeLocator(5, times))
-        ax.xaxis.set_major_formatter(TimeFormatter(times))
-        
-        for line in ax.xaxis.get_ticklines() + ax.xaxis.get_minorticklines():
-            line.set_marker(mpl.lines.TICKDOWN)
-        for label in ax.xaxis.get_ticklabels():
-            label.set_y(-0.05/figh)
-        
-        
-        # Configure height axis
-        ax.set_ylabel("Altitude (km)")
-        
-        majorticksbases = np.array([0.5, 1, 2, 5])
-        minorticksbases = np.array([0.1, 0.2, 0.5, 1])
-        height_per_tick = (ve2-ve1)/(height/(12*2/72.0))
-        
-        i = np.argmin(np.abs(majorticksbases - height_per_tick))
-        minor_locator = mpl.ticker.MultipleLocator(minorticksbases[i])
-        major_locator = mpl.ticker.MultipleLocator(majorticksbases[i])
-        ax.yaxis.set_minor_locator(minor_locator)
-        ax.yaxis.set_major_locator(major_locator)
-
-        for label in ax.yaxis.get_ticklabels():
-            label.set_x(-0.05/figw)
-
-        for line in ax.yaxis.get_ticklines()+ax.yaxis.get_minorticklines():
-            line.set_marker(mpl.lines.TICKRIGHT)
-
-        # Hide ticks on the top and right-hand side.
-        for tick in ax.xaxis.get_major_ticks() + \
-                    ax.yaxis.get_major_ticks() + \
-                    ax.xaxis.get_minor_ticks() + \
-                    ax.yaxis.get_minor_ticks():
-            tick.tick1line.set_visible(True)
-            tick.label1.set_visible(True)
-            tick.tick2line.set_visible(False)
-            tick.label2.set_visible(False)
-        
-        
-        
-        if colorbar:
-            cbaxes = fit_colorbar(fig, ax, space=0.4, padding=1.0)
-            cb = fig.colorbar(im, ax=ax, cax=cbaxes, orientation="vertical",
-                            extend="both", ticks=ticks)
-
-            #cb.set_label(dataset_name)
-            cb.ax.tick_params(direction="in")
-
-            for label in cb.ax.get_yticklabels():
-                label.set_fontsize(8)
-        
-        if dist_axis:
-            # Distance along track
-            setup_dist_axes(fig, ax, times)
-            
-        # Longitude/latitude.
-        setup_lonlat_axes(fig, ax, lons, lats)
-
-
-        if add_scalebar:
-            # Add scalebar if requested
+        else:
             ax.add_patch(patches.Rectangle([0, 14.5], width=100+2*33.3,
                                             height=0.5, facecolor="w"))
             ax.plot([50, 50+2*33.3], [14.7, 14.7], c="k")
             ax.text(50+33.3, 14.7, "20 km", ha="center", va="bottom",
                         rotation=0, c="k", fontsize=6)
+        
+    
     
 
 def setup_dist_axes(fig, axes, times, axis="x"):
