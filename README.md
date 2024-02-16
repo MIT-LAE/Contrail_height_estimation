@@ -10,7 +10,10 @@ After installation of the required packages, this environment can be activated u
 ```shell
 conda activate contrail-altitude-estimation
 ```
-
+Then, the package `CAP` can be installed using (make sure to be on the same directory level as the `CAP` folder!)
+```shell
+pip install .
+```
 # Instructions for running the code
 
 ## Input data
@@ -26,7 +29,7 @@ There are several steps involved in the collocation of GOES-16 and CALIOP LIDAR 
 | ERA5 data | [Copernicus CDS](https://cds.climate.copernicus.eu/cdsapp#!/dataset/reanalysis-era5-pressure-levels?tab=overview)| `/net/d15/data/vmeijer/ERA5/` | For advection during the collocation|
 
 ## Script execution order
-The scripts in the `scripts/` folder make use of the code within the `CAP` folder to perform the collocation. The different scripts should be run in a particular order. Ensure that the `contrail-altitude-estimation` `conda` environment is activated.
+The scripts in the `scripts/` folder make use of the code within the `CAP` folder to perform the collocation. The different scripts should be run in a particular order. Ensure that the `contrail-altitude-estimation` `conda` environment is activated, and that you installed the `CAP` package.
 
 NOTE TO SELF: Input formats for the scripts below should be specified still.
 
