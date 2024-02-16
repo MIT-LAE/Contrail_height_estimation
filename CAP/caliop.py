@@ -7,7 +7,6 @@ from pyhdf import HDF, VS
 import skimage.measure
 
 from .calipso import CALIPSO
-from .vertical_feature_mask import interpret_vfm
 from .visualization import plot_caliop_profile_direct, loadcolormap
 from .interpolation import interp2d_12
 
@@ -224,59 +223,6 @@ class CALIOP(CALIPSO):
         else:
             return cloud_mask, b532.T, b1064.T, lons, lats, times
     
-    def filter_rows(self, lat_min, lat_max, cirrus=True):
-        """
-        Returns mask that can be used for indexing any dataset in order to
-        subset it to the given latitude range.
-
-        Parameters
-        ----------
-        lat_min : float
-            Minimum latitude, degrees
-        lat_max : float
-            Maximum latitude, degrees
-        cirrus : bool (optional)
-            Whether or not to filter for cirrus data only (L2 feature)
-        """
-
-        lats = self.get("Latitude")
-        fcfs = self.get("Feature_Classification_Flags")
-
-        try:
-            extinction_qcs = self.get("ExtinctionQC_532")
-        except KeyError:
-            extinction_qcs = None
-
-        top_alts = self.get("Layer_Top_Altitude")
-
-        # Find coordinates of endpoints of (sub-)trajectory
-        # Column 0 contains locations corresponding to start of a 5km segment
-        # Column 2 contains locations corresponding to end of a 5km segment
-        if self.is_ascending():
-            rows = np.where((lats[:,0] >= lat_min)*(lats[:,2] <= lat_max))[0]
-        else:
-            rows = np.where((lats[:,2] >= lat_min)*(lats[:,0] <= lat_max))[0]
-
-        # Filter rows based on feature classification flags and extinction
-        # quality control
-        rows_to_keep = []
-        for r in rows[~top_alts.mask[rows, 0]]:
-            fcf = fcfs[r, 0]
-
-            if extinction_qcs is not None:
-                extinctionqc = extinction_qcs[r,0]
-            else:
-                extinctionqc = 16
-
-            if not filter_cirrus_feature(fcf) or extinctionqc >= 16:
-                continue 
-
-            rows_to_keep.append(r)
-
-        if not cirrus:
-            rows_to_keep = rows[~np.isin(rows, rows_to_keep)]
-
-        return rows_to_keep
     
     def get_backscatter_cmap(self):
 
@@ -340,30 +286,6 @@ class CALIOP(CALIPSO):
             plot_caliop_profile_direct(fig, ax, lons, lats, times, data_itp.T, **kwargs)
         plt.close()
         return fig
-
-def filter_cirrus_feature(fcf):
-    """
-    Given a feature classification flag from the CALIOP L2 layer product,
-    determines whether the feature is cirrus cloud.
-
-    Parameters
-    ----------
-    fcf : int
-        Feature classification flag
-
-    Returns
-    -------
-    is_cirrus : bool
-        Whether the feature is cirrus
-    """
-    
-    interpreted = interpret_vfm(fcf)
-
-    conditions = [interpreted[0] == "cloud", interpreted[1] == "high",
-                  interpreted[2] in ["randomly oriented ice", "horizontally oriented ice"],
-                  interpreted[3] == "high"]
-
-    return all(conditions)
 
     
 def interpolate_caliop_profile(data, lidar_alts=CALIOP_ALTITUDES,
