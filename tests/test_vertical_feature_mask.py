@@ -24,8 +24,10 @@ def test_get_fcf_bitstring():
     mask image corresponding to a cloud identified with higher confidence.
     
     The vertical feature mask feature classification flags here are
-    extracted from the L2 5km layer product directly
+    extracted from the L2 5km layer product directly. They correspond to
+    the highest altitude feature found in a particular 5 km layer.
     """
+    # From the CALIOP L2 5 km cloud layer product
     first_fcf = 44034
     second_fcf = 28090
     
