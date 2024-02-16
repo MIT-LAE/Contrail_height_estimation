@@ -12,6 +12,8 @@ conda activate contrail-altitude-estimation
 ```
 
 # Instructions for running the code
+
+## Input data
 There are several steps involved in the collocation of GOES-16 and CALIOP LIDAR data. Firstly, input files from different sources are required to perform the collocation. These are (AWS = Amazon Web Services):
 | Data | Remote location | Location on `hex.mit.edu` | Required for |
 | ---- | -------- | -------- | ------------ |
@@ -21,4 +23,42 @@ There are several steps involved in the collocation of GOES-16 and CALIOP LIDAR 
 | CALIOP L1b data  | https://www-calipso.larc.nasa.gov | `/net/d15/data/vmeijer/CALIOP_L1/` | Collocation of contrails |
 | CALIOP L2 data  | https://www-calipso.larc.nasa.gov | `/net/d15/data/vmeijer/CALIOP_L2/` | Collocation of cirrus |
 | IIR L1 data  | https://www-calipso.larc.nasa.gov | `/net/d15/data/vmeijer/IIR_L1/` | Visualization |
+| ERA5 data | [Copernicus CDS](https://cds.climate.copernicus.eu/cdsapp#!/dataset/reanalysis-era5-pressure-levels?tab=overview)| `/net/d15/data/vmeijer/ERA5/` | For advection during the collocation|
+
+## Script execution order
+The scripts in the `scripts/` folder make use of the code within the `CAP` folder to perform the collocation. The different scripts should be run in a particular order. Ensure that the `contrail-altitude-estimation` `conda` environment is activated.
+
+NOTE TO SELF: Input formats for the scripts below should be specified still.
+
+### Contrail collocation
+1. Run the `coarse' collocation step, which checks whether contrails are detected in the vicinity of the CALIPSO (satellite equipped with CALIOP) ground track:
+```shell
+python coarse_L1_collocation.py
+```
+2. Run the `fine' collocation step, which uses the results from the `coarse' collocation step:
+```shell
+python fine_L1_collocation.py
+```
+3. For manual inspection of the collocation results, figures can be generated using:
+```shell
+python generate_L1_figures.py
+```
+4. GOES-16 radiance and auxiliary data can be added to the collocation results using the scripts:
+```shell
+python append_goes_data.py
+python append_auxiliary_data.py
+```
+### Cirrus collocation
+There is only a single collocation step for the cirrus data:
+```shell
+python L2_collocation.py
+```
+GOES-16 radiance and auxiliary data can be added to the collocation results using the scripts:
+```shell
+python append_goes_data.py
+python append_auxiliary_data.py
+```
+
+
+
 
