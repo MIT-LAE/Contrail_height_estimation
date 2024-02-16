@@ -26,6 +26,38 @@ def test_get_fcf_bitstring():
     The vertical feature mask feature classification flags here are
     extracted from the L2 5km layer product directly. They correspond to
     the highest altitude feature found in a particular 5 km layer.
+
+    To reproduce these feature classification flag values, you can use the
+    following code.
+    ```python
+    from CAP.caliop import CALIOP
+
+    # Change this!
+    path = `path/to/CAL_LID_L1-Standard-V4-10.2018-08-08T18-58-40ZD.hdf"`
+    ca = CALIOP(path)
+
+    fcf = ca.get("Feature_Classification_Flags")
+    lat = ca.get("Latitude")
+    lon = ca.get("Longitude")
+
+    min_lat = 47.61
+    max_lat = 53.60
+
+    # First column correspond to layer start
+    # Last column corresponds to layer end
+    row_idx = (lat[:,0] >= min_lat) * (lat[:,-1] <= max_lat)
+
+    lat = lat[row_idx,:]
+    lon = lon[row_idx,:]
+
+    # Row is layer dimension, col is vertical dimension
+    fcf = fcf[row_idx,:]
+    
+    first_fcf = int(fcf[0,0])
+
+    # First 8 layers are occupied by the first feature
+    second_fcf = int(fcf[9,0]) 
+    ```
     """
     # From the CALIOP L2 5 km cloud layer product
     first_fcf = 44034
