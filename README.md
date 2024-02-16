@@ -24,7 +24,7 @@ There are several steps involved in the collocation of GOES-16 and CALIOP LIDAR 
 | GOES-16 ABI-L2 MCMIPC/F orthographic projections | N/A | `/net/d13/data/vmeijer/data/` and `/net/d13/data/lkulik/data/` | Contrail detection, collocation, visualization |
 | Contrail detections | N/A | `/net/d13/data/vmeijer/data/` and `/home/vmeijer/covid19/data/predictions_wo_sf/` | Collocation of contrails |
 | CALIOP L1b data  | https://www-calipso.larc.nasa.gov | `/net/d15/data/vmeijer/CALIOP_L1/` | Collocation of contrails |
-| CALIOP L2 data  | https://www-calipso.larc.nasa.gov | `/net/d15/data/vmeijer/CALIOP_L2/` | Collocation of cirrus |
+| CALIOP L2 data  | https://www-calipso.larc.nasa.gov | `/net/d15/data/vmeijer/CALIOP_L2/` `/net/d13/data/vmeijer/data/CALIPSO/CALIOP_L2/`| Collocation of cirrus |
 | IIR L1 data  | https://www-calipso.larc.nasa.gov | `/net/d15/data/vmeijer/IIR_L1/` | Visualization |
 | ERA5 data | [Copernicus CDS](https://cds.climate.copernicus.eu/cdsapp#!/dataset/reanalysis-era5-pressure-levels?tab=overview)| `/net/d15/data/vmeijer/ERA5/` | For advection during the collocation|
 
