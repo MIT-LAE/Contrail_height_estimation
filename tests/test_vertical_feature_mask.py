@@ -21,7 +21,7 @@ def test_get_fcf_bitstring():
     feature mask image corresponding to a cloud identified with low confidence.
     
     The second feature right after it is is "cyan" in the vertical feature
-    mask image corresponding to a cloud identified with high confidence.
+    mask image corresponding to a cloud identified with higher confidence.
     
     The vertical feature mask feature classification flags here are
     extracted from the L2 5km layer product directly
