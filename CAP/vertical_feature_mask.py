@@ -5,15 +5,23 @@ https://github.com/ErickShepherd/modis_caliop_anomaly_analysis/
 I have switched around keys of aerosol and cloud categories in the
 FEATURE_SUBTYPE dictionary, as I believe these were incorrect in the original
 file.
+
+All definitions are based on the following source:
+CALIPSO Data Products Catalog
+Document No: PC-SCI-503 Release 4.97
 """
 import itertools
 
 import numpy as np
 import pandas as pd
 
-# Constant definitions.
+# VFM = Vertical feature mask
+# Number of bits in the vertical feature mask.
 VFM_INTEGER_SIZE = 16
 
+# Table 92 in the CALIPSO Data Products Catalog
+# concerns the first 3 bits in the vertical feature mask.
+# Can be interpreted as "layer type"
 FEATURE_TYPE = {
     0 : "invalid",
     1 : "clear air",
@@ -25,6 +33,9 @@ FEATURE_TYPE = {
     7 : "no signal (totally attenuated)",
 }
 
+# Table 92 in the CALIPSO Data Products Catalog
+# concerns the 4th and 5th bits in the vertical feature mask.
+# Can be interpreted as "layer type quality assurance"
 FEATURE_TYPE_QA = {
     0 : "none",
     1 : "low",
@@ -32,6 +43,9 @@ FEATURE_TYPE_QA = {
     3 : "high",
 }
 
+# Table 92 in the CALIPSO Data Products Catalog
+# concerns the 6th and 7th bits in the vertical feature mask.
+# Can be interpreted as "cloud phase"
 ICE_WATER_PHASE = {
     0 : "unknown / not determined",
     1 : "ice",
@@ -39,6 +53,9 @@ ICE_WATER_PHASE = {
     3 : "oriented ice crystals",
 }
 
+# Table 92 in the CALIPSO Data Products Catalog
+# concerns the 8th and 9th bits in the vertical feature mask.
+# Can be interpreted as "cloud phase quality assurance"
 ICE_WATER_PHASE_QA = {
     0 : "none",
     1 : "low",
@@ -46,7 +63,12 @@ ICE_WATER_PHASE_QA = {
     3 : "high",
 }
 
+# Table 92 in the CALIPSO Data Products Catalog
+# concerns bits 10-12 in the vertical feature mask.
+# First index is the feature type, second index is the feature subtype.
 FEATURE_SUBTYPE = {
+
+    # clear air subtypes
     1 : {
         0 : "clear air",
     },
@@ -78,33 +100,42 @@ FEATURE_SUBTYPE = {
     # stratospheric aerosol sub-types
     4 : {
         0 : "invalid",
-        1 : "PSC aerosol",
+        1 : "polar stratospheric aerosol",
         2 : "volcanic ash",
-        3 : "sulfate/other",
+        3 : "sulfate",
         4 : "elevated smoke",
-        5 : "spare",
+        5 : "unclassified",
         6 : "spare",
-        7 : "other",
+        7 : "spare",
     },
     
+    # surface subtypes
     5 : {
         0 : "surface",
     },
     
+    # subsurface subtypes
     6 : {
         0 : "subsurface",
     },
     
+    # no signal subtypes
     7 : {
         0 : "no signal (totally attenuated)",
     },
 }
 
+# Table 92 in the CALIPSO Data Products Catalog
+# concerns the 13th bit in the vertical feature mask.
+# Can be interpreted as "feature subtype quality assurance"
 CLOUD_AEROSOL_TYPE_QA = {
     0 : "not confident",
     1 : "confident",
 }
 
+# Table 92 in the CALIPSO Data Products Catalog
+# concerns bits 14-16 in the vertical feature mask.
+# Describes amount of horizontal averaging necessary for layer detection.
 HORIZONTAL_AVERAGING = {
     0 : "not applicable",
     1 : "1/3 km",
@@ -114,10 +145,12 @@ HORIZONTAL_AVERAGING = {
     5 : "80 km",
 }
 
-def get_fcf_bitstring(feature_type, feature_type_qa, ice_water_phase, ice_water_phase_qa,
-                 feature_subtype, cloud_aerosol_type_qa, horizontal_averaging):
+def get_fcf_bitstring(feature_type, feature_type_qa, ice_water_phase,
+    ice_water_phase_qa, feature_subtype, cloud_aerosol_type_qa,
+    horizontal_averaging):
     """
-    Returns the bitstring corresponding to a particular decoded feature classification flag.
+    Returns the bitstring corresponding to a particular
+    decoded feature classification flag.
     """
     
     def find_key(d, vq):
@@ -172,8 +205,6 @@ def get_cirrus_fcf_integers():
     
 
 def digital_to_binary(a):
-    a
-
     a = np.asarray(a)
     
     # Ensures the result is a big-endian of the appropriate size.
