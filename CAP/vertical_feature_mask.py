@@ -72,7 +72,7 @@ FEATURE_SUBTYPE = {
     # cloud subtypes
     2 : {
         0 : "low overcast, transparent",
-        1 : "low overcas, opaque",
+        1 : "low overcast, opaque",
         2 : "transition stratocumulus",
         3 : "low, broken cumulus",
         4 : "altocumulus (transparent)",
