@@ -7,7 +7,7 @@ from pyhdf import HDF, VS
 import skimage.measure
 
 from .calipso import CALIPSO
-from .visualization import plot_caliop_profile_direct, loadcolormap
+from .visualization import plot_caliop_curtain, loadcolormap
 from .interpolation import interp2d_12
 
 PROJECTION_PATH = '/net/d13/data/vmeijer/reprojections/'
@@ -173,12 +173,6 @@ class CALIOP(CALIPSO):
         
         Parameters
         ----------
-        b532: np.array
-            CALIOP L1 attenuated backscatter at 532 nm (rows correspond to
-            height)
-        b1064: np.array
-            CALIOP L1 attenuated backscatter at 1064 nm (rows correspond to
-            height)
         backscatter_threshold: float (optional)
             Used to threshold the sum of the 532 and 1064 nm backscatters,
             default value from Iwabuchi et al. (2012)
@@ -281,9 +275,9 @@ class CALIOP(CALIPSO):
 
         reverse = kwargs.get("reverse", False)
         if reverse:
-            plot_caliop_profile_direct(fig, ax, lons[::-1], lats[::-1], times[::-1], data_itp.T[:,::-1], **kwargs)
+            plot_caliop_curtain(fig, ax, lons[::-1], lats[::-1], times[::-1], data_itp.T[:,::-1], **kwargs)
         else:
-            plot_caliop_profile_direct(fig, ax, lons, lats, times, data_itp.T, **kwargs)
+            plot_caliop_curtain(fig, ax, lons, lats, times, data_itp.T, **kwargs)
         plt.close()
         return fig
 
