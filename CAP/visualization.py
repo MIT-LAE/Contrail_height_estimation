@@ -387,7 +387,7 @@ def plot_caliop_curtain(fig, ax, lons, lats, times, data, min_alt=0.0,
     if rotate:
         data = data.T[::-1,:]
         im_extent = (ve2, ve1, 0, data.shape[1])
-    else
+    else:
         im_extent = (0, data.shape[1], ve1, ve2)
 
     im = ax.imshow(data, cmap=cmap, norm=norm, extent=im_extent,
@@ -488,7 +488,7 @@ def plot_caliop_curtain(fig, ax, lons, lats, times, data, min_alt=0.0,
             raise NotImplementedError(("Distance axis not implemented for "
                                     "rotated plots"))
     
-    
+
     setup_lonlat_axes(fig, ax, lons, lats, axis='y' if rotate else 'x')
 
     # TODO: what are these numbers?
