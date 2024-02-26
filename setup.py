@@ -7,4 +7,6 @@ extension = Extension("CAP.interpolation",
                 libraries=[],
                 include_dirs=[numpy.get_include()])
 
-setup(ext_modules=cythonize(extension))
+setup(ext_modules=cythonize(extension),
+
+     package_data={'CAP': ['assets/*']},)
