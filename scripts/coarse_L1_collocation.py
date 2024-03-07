@@ -26,7 +26,6 @@ from CAP.collocation  import *
 from CAP.abi import *
 from CAP.utils import *
 
-SAVE_DIR = "/home/vmeijer/contrail-height-estimation/data/"
 SUFFIX = "_coarse_collocation.parquet"
 
 def get_mask(time, conus=False):
@@ -73,7 +72,11 @@ def process_file(input_path, save_path):
 @click.argument("save_dir", type=click.Path())
 @click.option("--debug", is_flag=True, default=False)
 def main(input_path, save_dir, debug):
-    paths = pd.read_csv(input_path, header=None)[0].values
+    if os.path.isdir(input_path):
+        glob_path = os.path.join(input_path, "*.hdf")
+        paths = glob.glob(glob_path)
+    else:
+        paths = pd.read_csv(input_path, header=None)[0].values
 
     if not os.path.exists(save_dir):
         os.makedirs(save_dir)
@@ -93,7 +96,8 @@ def main(input_path, save_dir, debug):
 
         print(f"Running {__file__} in parallel using {n_cpus} CPUs")
 
-        pool.starmap(process_file, zip(paths, save_paths))
+        pool.starmap(process_file,
+                        zip(paths, save_paths))
         pool.close()
     
 
