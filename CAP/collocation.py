@@ -383,8 +383,8 @@ def fine_collocation(coarse_df, get_mask, get_ERA5_data, verbose=False):
         cloud_mask, b532, b1064, lons, lats, times = ca.get_cloud_mask(
                                             extent=extent,
                                             return_backscatters=True,
-                                            min_alt=MINIMUM_ALTITUDE,
-                                            max_alt=MAXIMUM_ALTITUDE)
+                                            ve1=MINIMUM_ALTITUDE,
+                                            ve2=MAXIMUM_ALTITUDE)
 
         extent[0] = lons.min()
         extent[1] = lons.max()
@@ -393,7 +393,7 @@ def fine_collocation(coarse_df, get_mask, get_ERA5_data, verbose=False):
         
         heights = np.linspace(MINIMUM_ALTITUDE * 1000, MAXIMUM_ALTITUDE * 1000,
                     cloud_mask.shape[0])[::-1][np.argmax(cloud_mask, axis=0)]
-        heights[heights == MAXIMUM_ALTITUDE] = np.nan
+        heights[heights == MAXIMUM_ALTITUDE * 1000] = np.nan
 
         ps = map_heights_to_pressure(lons, lats, times, heights, weather)
 

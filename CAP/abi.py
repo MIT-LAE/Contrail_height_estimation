@@ -529,7 +529,7 @@ def label_scan_rows(lons, lats, boundaries=SWATH_BOUNDARIES):
     """
     # Map longitudes and latitudes to ABI grid locations
     x_caliop, y_caliop = geodetic2ABI(lons, lats)
-    rows, cols = get_ABI_grid_locations(x_caliop,y_caliop)
+    rows, cols = get_ABI_grid_locations(x_caliop, y_caliop)
 
     # The boundaries are determined w.r.t the CONUS product "origin".
     rows -= CONUS_FIRST_ROW

@@ -5,6 +5,7 @@ import os
 from pyhdf.SD import SD, SDC
 from pyhdf import HDF, VS
 import skimage.measure
+import matplotlib.pyplot as plt
 
 from .calipso import CALIPSO
 from .visualization import plot_caliop_curtain, loadcolormap
@@ -26,10 +27,14 @@ CALIOP_VERTICAL_RESOLUTION = 30 # m
 
 # See Iwabuchi et al. (2012), section 3.3:
 # https://agupubs.onlinelibrary.wiley.com/doi/full/10.1029/2011JD017020
-BACKSCATTER_THRESHOLD = 0.003 # km^-1 sr^-1
 WIDTH_THRESHOLD = 1000 # meter
-THICKNESS_THRESHOLD = 60 # meter
 
+
+# Adjusted w.r.t. Iwabuchi et al. (2012) who use 0.003 km^-1 sr^-1
+BACKSCATTER_THRESHOLD = 0.007 # km^-1 sr^-1
+
+# Adjusted w.r.t. Iwabuchi et al. (2012) who use 60 m
+THICKNESS_THRESHOLD = 240 # meter
 
 class CollocationError(Exception):
     """Exception raised for errors with collocation """
@@ -162,7 +167,7 @@ class CALIOP(CALIPSO):
         
     def get_cloud_mask(self, backscatter_threshold=BACKSCATTER_THRESHOLD,
             width_threshold=WIDTH_THRESHOLD, 
-            thickness_threshold=THICKNESS_THRESHOLD, area_threshold=10,
+            thickness_threshold=THICKNESS_THRESHOLD, area_threshold=200,
             return_backscatters=False, ve1=0.0, ve2=40.0,
             vres=CALIOP_VERTICAL_RESOLUTION, **kwargs):
         """
@@ -251,13 +256,15 @@ class CALIOP(CALIPSO):
             extent = self.get_extent()
 
         if cloud_filter:
-            cloud_mask, b532, b1064, lons, lats, times = self.get_cloud_filter(extent=extent,
-                                                                            return_backscatters=True, **kwargs)
+            cloud_mask, b532, b1064, lons, lats, times = self.get_cloud_mask(extent=extent,
+                                                                            return_backscatters=True,
+                                                                            ve1=kwargs.get("min_alt",0),
+                                                                            ve2=kwargs.get("max_alt",0),**kwargs)
 
             if wavelength == 532:
-                data_itp = b532 * cloud_mask.T
+                data_itp = (b532 * cloud_mask).T
             else:
-                data_itp = b1064 * cloud_mask.T
+                data_itp = (b1064 * cloud_mask).T
         else:
             if wavelength == 532:
                 dataset = "Total_Attenuated_Backscatter_532"
@@ -332,7 +339,7 @@ def interpolate_caliop_profile(data, lidar_alts=CALIOP_ALTITUDES,
 def get_cloud_mask_from_backscatters(b532, b1064, 
             backscatter_threshold=BACKSCATTER_THRESHOLD,
             width_threshold=WIDTH_THRESHOLD, 
-            thickness_threshold=THICKNESS_THRESHOLD, area_threshold=10):
+            thickness_threshold=THICKNESS_THRESHOLD, area_threshold=200):
     """
     Filters out noise in CALIOP L1 profiles based on thresholding the
     backscatter values. 
