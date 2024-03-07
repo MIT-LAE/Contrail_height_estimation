@@ -13,7 +13,8 @@ from .geometry import parallax_correction_vicente_backward
 from .advection import get_interpolated_winds, get_advected_positions
 from .abi import (get_ABI_grid_locations, geodetic2ABI, CONUS_FIRST_COL,
                 CONUS_FIRST_ROW, get_scan_start_time, get_pixel_times,
-                map_geodetic_extent_to_ABI, TRANSITION_TIME, label_scan_rows)
+                map_geodetic_extent_to_ABI, TRANSITION_TIME, label_scan_rows,
+                find_closest_ABI_product, N_ABI_FD_ROWS, N_ABI_FD_COLS)
 from .utils import (get_lons, get_lats, get_ortho_ids, get_netcdf_asset,
                     floor_time, round_conus_time)
 from .vertical_feature_mask import get_cirrus_fcf_integers
@@ -379,7 +380,7 @@ def fine_collocation(coarse_df, get_mask, get_ERA5_data, verbose=False):
         # Subset caliop data
         extent = CALIOP_SUBSET_EXTENT[:2] + [lat_min, lat_max]
 
-        cloud_mask, b532, b1064, lons, lats, times = ca.get_cloud_filter(
+        cloud_mask, b532, b1064, lons, lats, times = ca.get_cloud_mask(
                                             extent=extent,
                                             return_backscatters=True,
                                             min_alt=MINIMUM_ALTITUDE,
