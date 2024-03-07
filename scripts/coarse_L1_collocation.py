@@ -20,36 +20,10 @@ import pandas as pd
 import datetime as dt
 
 from CAP.collocation import coarse_collocation
-from utils import process_multiple
+from utils import process_multiple, get_mask
 
 INPUT_SUFFIX = ".hdf"
 OUTPUT_SUFFIX = "_coarse_collocation.parquet"
-
-def get_mask(time, conus=False):
-
-    if conus or time > dt.datetime(2021, 12, 31):
-
-        suffix = "F"
-        if conus:
-            suffix = "C"
-        path = "/net/d13/data/vmeijer/data/orthographic_detections_goes16/" \
-                    + "ABI-L2-MCMIP" + suffix + time.strftime("/%Y/%j/%H/%Y%m%d_%H_%M.csv")
-        try:
-            df = pd.read_csv(path) 
-        except FileNotFoundError as e:
-            raise FileNotFoundError(f"No detection found at {path}")
-            
-        mask = np.zeros((2000, 3000))
-        mask[df.row.values, df.col.values] = 1
-        return mask
-    else:
-        df = pd.read_csv("/home/vmeijer/covid19/data/predictions_wo_sf/"\
-                            + time.strftime('%Y%m%d.csv'))
-        df.datetime = pd.to_datetime(df.datetime)
-        df = df[df.datetime == time]
-        mask = np.zeros((2000, 3000))
-        mask[df.x.values, df.y.values] = 1
-        return mask
 
 def process_file(input_path, save_path):
 
