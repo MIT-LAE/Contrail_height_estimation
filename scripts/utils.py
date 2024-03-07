@@ -32,12 +32,12 @@ def process_multiple(process_single, input_path, save_dir, input_suffix,
     # If input path is a directory, we'll look for all files with the
     # indicated extension
     if os.path.isdir(input_path):
-        glob_path = os.path.join(input_path, "*", input_suffix)
+        glob_path = os.path.join(input_path, "*" + input_suffix)
         paths = glob.glob(glob_path)
     # Otherwise we assume the file contains a list of paths
     else:
         paths = pd.read_csv(input_path, header=None)[0].values
-
+    
     # Create the save directory if it doesn't exist
     if not os.path.exists(save_dir):
         os.makedirs(save_dir)
@@ -46,7 +46,7 @@ def process_multiple(process_single, input_path, save_dir, input_suffix,
     save_paths = []
     for p in paths:
         save_paths.append(os.path.join(save_dir,
-                    os.path.basename(p).replace(".hdf", output_suffix)))
+                    os.path.basename(p).replace(input_suffix, output_suffix)))
         
     if not parallel:
         for p, s in zip(paths, save_paths):
