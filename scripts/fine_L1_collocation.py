@@ -10,22 +10,22 @@ Use this script to do a fine collocation between CALIOP L1 products
 and contrail detections.
 """
 
-import os, sys, glob
-import numpy as np, pandas as pd, datetime as dt
+import os
+import sys
+import glob
+import datetime as dt
 import multiprocessing 
 
+import numpy as np
+import pandas as pd
+import click
 
-from CAP.caliop import *
-from CAP.geometry import * 
-from CAP.collocation  import *
-from CAP.abi import *
-from CAP.utils import *
+from CAP.collocation import fine_collocation
+from contrails.meteorology.era5 import get_ERA5_data
+from utils import process_multiple
 
-from contrails.meteorology.era5 import *
-
-SAVE_DIR = "/home/vmeijer/contrail-height-estimation/data/"
-SUFFIX = "_fine_collocation.parquet"
-
+INPUT_SUFFIX = "_coarse_collocation.parquet"
+OUTPUT_SUFFIX = "_fine_collocation.parquet"
 
 def era5_wrapper(time):
 
@@ -37,9 +37,9 @@ def era5_wrapper(time):
         return get_ERA5_data(time)
 
 
-def main(input_path, save_path):
+def process_file(input_path, save_path):
 
-
+    print(f"Processing {input_path}")
     if input_path.endswith(".pkl"):
         input_df = pd.read_pickle(input_path)
     else:
@@ -58,42 +58,45 @@ def main(input_path, save_path):
         return
 
     if df is not None:
-        df.to_pickle(save_path)
+        print(f"Found {len(df)} fine collocations for {input_path}")
+        df.to_parquet(save_path)
     return 
-
-
     
 def get_mask(time, conus=False):
 
-    if conus:
-        df = pd.read_csv("/net/d13/data/vmeijer/data/orthographic_detections_goes16/ABI-L2-MCMIPC/" + time.strftime("%Y/%j/%H/%Y%m%d_%H_%M.csv"))
+    if conus or time > dt.datetime(2021, 12, 31):
+
+        suffix = "F"
+        if conus:
+            suffix = "C"
+        path = "/net/d13/data/vmeijer/data/orthographic_detections_goes16/" \
+                    + "ABI-L2-MCMIP" + suffix + time.strftime("/%Y/%j/%H/%Y%m%d_%H_%M.csv")
+        try:
+            df = pd.read_csv(path) 
+        except FileNotFoundError as e:
+            raise FileNotFoundError(f"No detection found at {path}")
+            
+        mask = np.zeros((2000, 3000))
+        mask[df.row.values, df.col.values] = 1
+        return mask
     else:
-        df = pd.read_csv("/net/d13/data/vmeijer/data/orthographic_detections_goes16/ABI-L2-MCMIPF/" + time.strftime("%Y/%j/%H/%Y%m%d_%H_%M.csv"))
+        df = pd.read_csv("/home/vmeijer/covid19/data/predictions_wo_sf/"\
+                            + time.strftime('%Y%m%d.csv'))
+        df.datetime = pd.to_datetime(df.datetime)
+        df = df[df.datetime == time]
+        mask = np.zeros((2000, 3000))
+        mask[df.x.values, df.y.values] = 1
+        return mask
+
+@click.command()
+@click.argument("input_path", type=click.Path(exists=True))
+@click.argument("save_dir", type=click.Path())
+@click.option("--debug", is_flag=True, default=False)
+def main(input_path, save_dir, debug):
+    process_multiple(process_file, input_path, save_dir, INPUT_SUFFIX,
+                        OUTPUT_SUFFIX, parallel=not debug)
 
 
-    mask = np.zeros((2000, 3000))
-    mask[df.row.values, df.col.values] = 1
-    return mask
 
 if __name__ == "__main__":
-    from multiprocessing import Pool
-    
-    paths = ["/home/vmeijer/contrail-height-estimation/data/CAL_LID_L1-Standard-V4-10.2018-08-08T18-58-40ZD_Subset_coarse_collocation.parquet"]
-    
-    save_paths = []
-    for p in paths:
-        save_paths.append(os.path.join(SAVE_DIR,
-                    os.path.basename(p).replace(".hdf", SUFFIX)))
-
-    if sys.argv[-1] == "DEBUG":
-        for p, s in zip(paths, save_paths):
-            main(p, s)
-    else:
-        n_cpus = int(os.environ.get("SLURM_CPUS_PER_TASK", 1))
-
-        pool = multiprocessing.Pool(n_cpus)
-
-        print(f"Running {__file__} in parallel using {n_cpus} CPUs")
-
-        pool.starmap(main, zip(paths, save_paths))
-        pool.close()
+    main()
