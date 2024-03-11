@@ -88,9 +88,14 @@ def generate_L1_IIR_figure(df, save_name=None):
 
     ax = fig.add_subplot(grid[0,:2])
 
-    plot_caliop_curtain(fig, ax, lons, lats, times, filtered.T,
+    if ascending:
+        plot_caliop_curtain(fig, ax, lons, lats, times, filtered.T,
                         min_alt=8, max_alt=15, rotate=True)
-   
+    # If descending, reverse the order of the data
+    else:
+        plot_caliop_curtain(fig, ax, lons[::-1],
+                        lats[::-1], times[::-1], filtered.T[:,::-1],
+                        min_alt=8, max_alt=15, rotate=True)
 
     # Modify horizontal axis tick labels
     ax.set_xticks([8.0, 11.5, 15.0])
@@ -163,7 +168,10 @@ def generate_L1_IIR_figure(df, save_name=None):
     # Plot matches, group them by unique GOES ids
     unique_ids = np.unique(df["goes_ABI_id"])
 
-    first_profile_id = np.where(ca.get("Latitude").data == lats[0])[0]
+    if ascending:
+        first_profile_id = np.where(ca.get("Latitude").data == lats[0])[0]
+    else:
+        first_profile_id = np.where(ca.get("Latitude").data == lats[-1])[0]
 
     counter = 0
     for i, ID in enumerate(unique_ids):
@@ -194,7 +202,7 @@ def generate_L1_IIR_figure(df, save_name=None):
 
         else:
             ax.scatter(df[df.goes_ABI_id == ID].caliop_top_height.values/1000. +0.25,
-                    filtered.shape[1] -(df[df.goes_ABI_id == ID].profile_id.values-first_profile_id),
+                    -(df[df.goes_ABI_id == ID].profile_id.values-first_profile_id),
                     c=[c], s=0.1)
 
 

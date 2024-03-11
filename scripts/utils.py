@@ -5,8 +5,23 @@ import os
 import sys
 import glob
 import multiprocessing
+import datetime as dt
 
 import pandas as pd
+import numpy as np
+
+def load_dataframe(path):
+    """
+    Utility function to read a dataframe, without specifying the extension
+    of the file. Used for 'backwards compatability' with previously
+    generated pickle files.
+    """
+    if path.endswith(".pkl"):
+        return pd.read_pickle(path)
+    elif path.endswith(".parquet"):
+        return pd.read_parquet(path)
+    else:
+        raise ValueError(f"Unknown file type: {path}")
 
 def process_multiple(process_single, input_path, save_dir, input_suffix,
                         output_suffix, parallel=False):
@@ -34,6 +49,9 @@ def process_multiple(process_single, input_path, save_dir, input_suffix,
     if os.path.isdir(input_path):
         glob_path = os.path.join(input_path, "*" + input_suffix)
         paths = glob.glob(glob_path)
+    # If the input path is a file and it has the desired input suffix,
+    elif input_path.endswith(input_suffix):
+        paths = [input_path]
     # Otherwise we assume the file contains a list of paths
     else:
         paths = pd.read_csv(input_path, header=None)[0].values
@@ -61,3 +79,30 @@ def process_multiple(process_single, input_path, save_dir, input_suffix,
         pool.starmap(process_single,
                         zip(paths, save_paths))
         pool.close()
+
+
+def get_mask(time, conus=False):
+
+    if conus or time > dt.datetime(2021, 12, 31):
+
+        suffix = "F"
+        if conus:
+            suffix = "C"
+        path = "/net/d13/data/vmeijer/data/orthographic_detections_goes16/" \
+                    + "ABI-L2-MCMIP" + suffix + time.strftime("/%Y/%j/%H/%Y%m%d_%H_%M.csv")
+        try:
+            df = pd.read_csv(path) 
+        except FileNotFoundError as e:
+            raise FileNotFoundError(f"No detection found at {path}")
+            
+        mask = np.zeros((2000, 3000))
+        mask[df.row.values, df.col.values] = 1
+        return mask
+    else:
+        df = pd.read_csv("/home/vmeijer/covid19/data/predictions_wo_sf/"\
+                            + time.strftime('%Y%m%d.csv'))
+        df.datetime = pd.to_datetime(df.datetime)
+        df = df[df.datetime == time]
+        mask = np.zeros((2000, 3000))
+        mask[df.x.values, df.y.values] = 1
+        return mask
