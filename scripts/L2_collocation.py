@@ -6,29 +6,28 @@
 #SBATCH --partition=normal
 #SBATCH -J L2_collocation
 """
-Use this script to do a collocation between CALIOP L2 5 km cloud-layer cirrus data
+Use this script to do a collocation between CALIOP L2 5 km cloud-layer cirrus
 and GOES-16 ABI data.
 """
+import os
+import sys
+import glob
 
-import os, sys, glob
-import numpy as np, pandas as pd, datetime as dt
-import multiprocessing 
+import click
+import numpy as np
+import pandas as pd
+import datetime as dt
 
-sys.path.append("/home/vmeijer/contrail-height-estimation/src/")
+from CAP.caliop import CALIOP
+from CAP.collocation  import fine_L2_collocation, coarse_L2_collocation
+from contrails.meteorology.era5 import get_ERA5_data
+from utils import process_multiple
 
-from caliop import *
-from geometry import * 
-from collocation  import *
-from abi import *
-from utils import *
-
-from contrails.meteorology.era5 import *
-
-SAVE_DIR = "/home/vmeijer/contrail-height-estimation/data/L2/"
+INPUT_SUFFIX = ".hdf"
+OUTPUT_SUFFIX = "_L2_collocation.parquet"
 
 
-
-def main(input_path, save_path):
+def process_file(input_path, save_path):
 
     if os.path.exists(save_path):
         print(f"Already done for {input_path}, result at {save_path}")
@@ -38,7 +37,7 @@ def main(input_path, save_path):
 
         if "caliop_path" in coarse_df.columns:
             df = fine_L2_collocation(coarse_df, get_ERA5_data, verbose=True)
-            df.to_pickle(save_path)
+            df.to_parquet(save_path)
 
             return 
         else:
@@ -47,21 +46,17 @@ def main(input_path, save_path):
         
     except Exception as e:
         print(f"Failed for {input_path} with {str(e)}")
+        raise e
         return
 
+@click.command()
+@click.argument("input_path", type=click.Path(exists=True))
+@click.argument("save_dir", type=click.Path())
+@click.option("--debug", is_flag=True, default=False)
+def main(input_path, save_dir, debug):
+    process_multiple(process_file, input_path, save_dir, INPUT_SUFFIX,
+                        OUTPUT_SUFFIX, parallel=not debug)
+
+
 if __name__ == "__main__":
-    paths = np.sort(glob.glob("/net/d13/data/vmeijer/data/CALIPSO/CALIOP_L2/CAL_LID_L2*.hdf"))[::-1]
-    save_paths = np.array([SAVE_DIR + os.path.basename(p).replace(".hdf",".pkl") for p in paths])
-
-    if sys.argv[-1] == "DEBUG":
-        for p, s in zip(paths, save_paths):
-            main(p, s)
-    else:
-        n_cpus = int(os.environ.get("SLURM_CPUS_PER_TASK", 1))
-
-        pool = multiprocessing.Pool(n_cpus)
-
-        print(f"Running {__file__} in parallel using {n_cpus} CPUs")
-
-        pool.starmap(main, zip(paths, save_paths))
-        pool.close()
+    main()
