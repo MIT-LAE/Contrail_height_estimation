@@ -34,7 +34,8 @@ from CAP.abi import ORTHO_PROJ, ORTHO_EXTENT
 from CAP.utils import get_ortho_ids, get_lons, get_lats
 
 from contrails.satellites.goes.reprojection import get_reprojection_path
-from contrails.satellites.goes.abi import ash_from_nc, ash_from_h5, get_image_path
+from contrails.satellites.goes.abi import (ash_from_nc, ash_from_h5,
+                                            get_image_path)
 
 from utils import process_multiple, load_dataframe, get_mask
 
@@ -134,7 +135,8 @@ def generate_L1_IIR_figure(df, save_name=None):
 
     if conus or goes_time > dt.datetime(2021, 12, 31):
 
-        nc = xr.open_dataset(get_reprojection_path(goes_time, product="ABI-L2-MCMIP" + suffix))
+        nc = xr.open_dataset(get_reprojection_path(goes_time,
+                                            product="ABI-L2-MCMIP" + suffix))
         ash = ash_from_nc(nc)
     else:
         h5_path = get_image_path(goes_time)
@@ -149,8 +151,9 @@ def generate_L1_IIR_figure(df, save_name=None):
     boundaries = binary_dilation(mask) - mask
 
     gax.imshow(ash, extent=ORTHO_EXTENT, origin='upper', transform=ORTHO_PROJ)
-    gax.imshow(np.ma.masked_array(boundaries, mask=(boundaries==0.)), extent=ORTHO_EXTENT,
-               origin='upper', transform=ORTHO_PROJ, cmap="gray_r")
+    gax.imshow(np.ma.masked_array(boundaries, mask=(boundaries==0.)),
+                extent=ORTHO_EXTENT, origin='upper', transform=ORTHO_PROJ,
+                cmap="gray_r")
 
     gax.set_extent(extent, ccrs.PlateCarree())
     gax.set_aspect('auto')
@@ -183,44 +186,54 @@ def generate_L1_IIR_figure(df, save_name=None):
 
         # Map to IIR row
         if ascending:
-            iir_rows = np.interp(clats, middle_iir_lats, np.arange(middle_iir_lats.size))
+            iir_rows = np.interp(clats, middle_iir_lats,
+                                    np.arange(middle_iir_lats.size))
         else:
-            iir_rows = np.interp(clats, middle_iir_lats[::-1], np.arange(middle_iir_lats.size)[::-1])
+            iir_rows = np.interp(clats, middle_iir_lats[::-1], 
+                                    np.arange(middle_iir_lats.size)[::-1])
 
         c = cm.get_cmap("nipy_spectral")(i/len(unique_ids))
 
-        gax.scatter(lo, la, c=[c], s=1, marker="s", transform=ccrs.PlateCarree(), zorder=4)
-        gax.scatter(clons, clats, c=[c],s=1, marker="x", transform=ccrs.PlateCarree(), zorder=4)
+        gax.scatter(lo, la, c=[c], s=1, marker="s",
+                                    transform=ccrs.PlateCarree(), zorder=4)
+        gax.scatter(clons, clats, c=[c],s=1, marker="x", 
+                                    transform=ccrs.PlateCarree(), zorder=4)
 
-        ax1.scatter([35] * len(iir_rows), iir_rows, s=1, c=[c], marker="s", zorder=4)
-        ax2.scatter([35] * len(iir_rows), iir_rows, s=1, c=[c], marker="s", zorder=4)
+        ax1.scatter([35] * len(iir_rows), iir_rows, s=1, c=[c], marker="s",
+                    zorder=4)
+        ax2.scatter([35] * len(iir_rows), iir_rows, s=1, c=[c], marker="s",
+                    zorder=4)
 
         if ascending:
-            ax.scatter(df[df.goes_ABI_id == ID].caliop_top_height.values/1000. +0.25,
-                    (df[df.goes_ABI_id == ID].profile_id.values-first_profile_id),
-                    c=[c], s=0.1)
+            x = df[df.goes_ABI_id == ID].caliop_top_height.values/1000. + 0.25
+            y = df[df.goes_ABI_id == ID].profile_id.values-first_profile_id
+            ax.scatter(x, y, c=[c], s=0.1)
 
         else:
-            ax.scatter(df[df.goes_ABI_id == ID].caliop_top_height.values/1000. +0.25,
-                    -(df[df.goes_ABI_id == ID].profile_id.values-first_profile_id),
-                    c=[c], s=0.1)
+            x = df[df.goes_ABI_id == ID].caliop_top_height.values/1000. + 0.25
+            y = -(df[df.goes_ABI_id == ID].profile_id.values-first_profile_id)
+            ax.scatter(x, y, c=[c], s=0.1)
 
 
 
-    gax.scatter([],[],label="Collocated, measured by CALIOP", marker="x",c="k")
-    gax.scatter([],[], label="Collocated, as viewed by GOES-16", marker="s", c="k"
-               )
+    gax.scatter([],[],label="Collocated, measured by CALIOP", marker="x", 
+                        c="k")
+    gax.scatter([],[], label="Collocated, as viewed by GOES-16", marker="s", 
+                        c="k")
+                    
     ax.set(title="CALIOP L1")
     gax.set(title="GOES-16 Ash")
 
-    fig.suptitle(f"ABI-L2-MCMIP{suffix} time: {goes_time}\nAdvection time: {df.iloc[0].adv_time}",
+    fig.suptitle(f"ABI-L2-MCMIP{suffix} time: {goes_time}"\
+                + f"\nAdvection time: {df.iloc[0].adv_time}",
                  fontsize=8)
 
     ## Add size bar
-    ax.add_patch(patches.Rectangle([14.0, 0], height=100+2*33.3, width=1.0, facecolor="w"))
+    ax.add_patch(patches.Rectangle([14.0, 0], height=100+2*33.3, width=1.0,
+                                facecolor="w"))
     ax.plot([14.3, 14.3], [50, 50+2*33.3], c="k")
-    ax.text(14.3, 50+33.3, "20 km", ha="right", va="center", rotation=90, c="k",
-            fontsize=6)
+    ax.text(14.3, 50+33.3, "20 km", ha="right", va="center", rotation=90, 
+            c="k", fontsize=6)
 
     ax1.set(title=r"IIR 10.6 $\mu$m")
     if ascending:
@@ -231,7 +244,6 @@ def generate_L1_IIR_figure(df, save_name=None):
     ax1.set_aspect("auto")
     ax1.set_xticks([])
     ax1.set_yticks([])
-    
     
     ax2.set(title=r"IIR BTD")
     if ascending:
