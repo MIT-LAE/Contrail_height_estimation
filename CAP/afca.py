@@ -9,6 +9,10 @@ from .utils import alt2pres, pres2alt
 
 SECONDS_IN_HOUR = 3600
 
+# AFCA assigns this value to coordinates of trajectories that go out of the
+# domain of the weather dataset provided
+OODSENTINEL = 9999.0
+
 def prepare_AFCA_backward_analysis(lons, lats, times, pressure_levels,
                                    n_hours=4, step=10):
     """
