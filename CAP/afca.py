@@ -5,7 +5,7 @@ import pytz
 import numpy as np
 import pandas as pd
 
-from .utils import alt2pres, pres2alt
+from .utils import alt2pres
 
 SECONDS_IN_HOUR = 3600
 
