@@ -21,15 +21,17 @@ import pandas as pd
 import shapely.affinity
 from shapely.geometry import Point
 from shapely.ops import unary_union
+import xarray as xr
 
+from contrails.satellites.goes.abi import get_nc_path
 from contrails.meteorology.era5 import get_ERA5_data
 from contrails.flights.utils import (DomainBoundary, get_flight_data,
                                     subset_flight_data, get_haversine)
 
+from CAP.abi import ABI2geodetic
 from CAP.afca import (prepare_AFCA_input_flights,
                       prepare_AFCA_backward_analysis, SECONDS_IN_HOUR,
                       OODSENTINEL)
-from utils import process_multiple
 
 INPUT_SUFFIX = ".npy"
 OUTPUT_SUFFIX = "_coarse_collocation.parquet"
@@ -180,12 +182,16 @@ def get_flight_candidates(longitude, latitude, time,
                                         "heading", "speed", "callsign"])
     
     # Perform subsetting to obtain flight candidates
-    flights = subset_flight_data(pd.DataFrame(flights),
-                            boundary=db_flights,
-                            min_altitude=MIN_ALTITUDE,
-                            max_altitude=MAX_ALTITUDE,
-                            min_time=time-dt.timedelta(hours=hours_backward),
-                            max_time=time)
+    try:
+        flights = subset_flight_data(pd.DataFrame(flights),
+                                boundary=db_flights,
+                                min_altitude=MIN_ALTITUDE,
+                                max_altitude=MAX_ALTITUDE,
+                                min_time=time-dt.timedelta(hours=hours_backward),
+                                max_time=time)
+    # If no flights are left after subsetting
+    except ValueError:
+        return pd.DataFrame()
     return flights
 
 
@@ -265,26 +271,62 @@ def get_flight_altitude_distribution(flights):
     return distance_distribution
 
 
-def process_file(input_path, save_path):
-
-    if os.path.exists(save_path):
-        print(f"Already done for {input_path}, result at {save_path}")
-        return
-    try:
-        df = coarse_collocation(input_path, get_mask, conus=True, verbose=True)
-        df.to_parquet(save_path)
-        return 
-    except Exception as e:
-        print(f"Failed for {input_path} with {str(e)}")
-        return
-
 @click.command()
 @click.argument("input_path", type=click.Path(exists=True))
 @click.argument("save_dir", type=click.Path())
-@click.option("--debug", is_flag=True, default=False)
-def main(input_path, save_dir, debug):
-    process_multiple(process_file, input_path, save_dir, INPUT_SUFFIX,
-                        OUTPUT_SUFFIX, parallel=not debug)
+def main(input_path, save_dir):
+
+    df = pd.read_parquet(input_path)
+
+    # Create output directories
+    os.makedirs(save_dir, exist_ok=True)
+    os.makedirs(os.path.join(save_dir, "flights"), exist_ok=True)
+    os.makedirs(os.path.join(save_dir, "distributions"), exist_ok=True)
+
+    # Loop through test files and create flight altitude distributions
+    for file in df['file'].values:
+        conus = False
+        if "MCMIPC" in file:
+            conus = True
+        time = dt.datetime.strptime("_".join(
+                    os.path.basename(file).split("_")[1:4]), "%Y%m%d_%H_%M")
+        min_col, _, min_row, _ = [int(s) 
+                for s in os.path.basename(file).split(".")[0].split("_")[-4:]]
+        label = np.load(file.replace("images", "labels"))
+
+        rows, cols = np.where(label > 0)
+        rows += min_row
+        cols += min_col
+
+        suffix = "C" if conus else "F"
+        nc = xr.open_dataset(get_nc_path(time,
+                                            product="ABI-L2-MCMIP" + suffix))
+        try: 
+            x = nc.x.values[cols]
+            y = nc.y.values[rows]
+        except:
+            continue
+        lons, lats = ABI2geodetic(x, y)
+
+        # arbitrarily take first point
+        longitude = lons[0]
+        latitude = lats[0]
+
+        flights = get_flight_candidates(longitude, latitude, time)
+        if len(flights) == 0:
+            print(f"No flights found for {time}")
+            continue
+        flights = forward_advect_flights(flights, time)
+        flights.to_parquet(os.path.join(save_dir, "flights",
+                                f"{time.strftime('%Y%m%d_%H_%M')}.parquet"),
+                               use_deprecated_int96_timestamps=True)
+        
+        df = get_flight_altitude_distribution(flights)
+        df.to_parquet(os.path.join(save_dir, "distributions",
+                                f"{time.strftime('%Y%m%d_%H_%M')}.parquet"),
+                                use_deprecated_int96_timestamps=True)
+
+                            
 
 if __name__ == "__main__":
     main()
