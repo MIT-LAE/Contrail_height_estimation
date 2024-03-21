@@ -206,11 +206,12 @@ def get_flight_candidates(longitude, latitude, time,
             # Remove time zone to comply with subset_flight_data function
             flights["time"] = flights["time"].dt.tz_localize(None)
             
-            # Rename column
+            # Rename columns
             flights = flights.rename(columns={"track" : "heading",
                                             "groundspeed" : "speed"})
-
-
+            # Drop columns
+            flights = flights.drop(columns=["timestamp", "squawk", "alert",
+                                "onground", "spi", "hour", "track_unwrapped"])
         except Exception as e:
             print(t1, t2, polygon_union.bounds)
             raise e
