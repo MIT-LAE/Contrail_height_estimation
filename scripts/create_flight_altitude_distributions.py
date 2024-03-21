@@ -23,6 +23,9 @@ from shapely.geometry import Point
 from shapely.ops import unary_union
 import xarray as xr
 
+from traffic.data import opensky
+import pytz
+
 from contrails.satellites.goes.abi import get_nc_path
 from contrails.meteorology.era5 import get_ERA5_data
 from contrails.flights.utils import (DomainBoundary, get_flight_data,
@@ -169,17 +172,50 @@ def get_flight_candidates(longitude, latitude, time,
                 polygon_union.convex_hull.exterior.xy).T, great_circle=True)
     
     # Load OpenSky flight data
-    flights = get_flight_data(time)
+    try:
+        flights = get_flight_data(time)
+         # Rename columns
+        flights = flights.rename(columns={"lat" : "latitude",
+                                        "lon" : "longitude",
+                                        "alt" : "altitude",
+                                        "velocity" : "speed"})
 
-    # Rename columns
-    flights = flights.rename(columns={"lat" : "latitude",
-                                      "lon" : "longitude",
-                                      "alt" : "altitude",
-                                      "velocity" : "speed"})
+        # Drop NaN values in specified columns
+        flights = flights.dropna(subset=["longitude", "latitude", "time",
+                                            "heading", "speed", "callsign"])
+    except FileNotFoundError:
 
-    # Drop NaN values in specified columns
-    flights = flights.dropna(subset=["longitude", "latitude", "time",
-                                        "heading", "speed", "callsign"])
+        # Try to query OpenSky database directly
+        t1 = time - dt.timedelta(hours=hours_backward)
+        t2 = time 
+        try:
+            tflights = opensky.history(start=t1.replace(tzinfo=pytz.utc),
+                                        stop=t2.replace(tzinfo=pytz.utc),
+                                        bounds=list(polygon_union.bounds),
+                                        other_params=" AND baroaltitude>8000 ",
+                                        nautical_units=False, cached=False)
+
+            tflights = tflights.resample("5min").eval()
+            flights = tflights.data
+            flights['time'] = flights['timestamp']
+            flights = flights.dropna(subset=["altitude", "longitude",
+                                                "latitude", "time"])
+            flights = flights[flights.altitude < 15500]
+            flights = flights.sort_values(by=['callsign','time'])
+
+            # Remove time zone to comply with subset_flight_data function
+            flights["time"] = flights["time"].dt.tz_localize(None)
+            
+            # Rename column
+            flights = flights.rename(columns={"track" : "heading",
+                                            "groundspeed" : "speed"})
+
+
+        except Exception as e:
+            print(t1, t2, polygon_union.bounds)
+            raise e
+
+   
     
     # Perform subsetting to obtain flight candidates
     try:
@@ -221,7 +257,8 @@ def forward_advect_flights(flights, time):
     for col in ["latitude", "longitude", "altitude", "pressure_hPa", 
                 "heading", "adv_pressure_hPa", "speed", 
                 "delta_x", "delta_t", "v_dt"]:
-        flights[col] = flights[col].values.astype(np.float64)
+        if col in flights.columns:
+            flights[col] = flights[col].values.astype(np.float64)
 
     return flights
 
@@ -290,6 +327,16 @@ def main(input_path, save_dir):
             conus = True
         time = dt.datetime.strptime("_".join(
                     os.path.basename(file).split("_")[1:4]), "%Y%m%d_%H_%M")
+        
+        flight_save_path = os.path.join(save_dir, "flights",
+                                f"{time.strftime('%Y%m%d_%H_%M')}.parquet")
+        dist_save_path = os.path.join(save_dir, "distributions",
+                                f"{time.strftime('%Y%m%d_%H_%M')}.parquet")
+        
+        if os.path.exists(flight_save_path) and os.path.exists(dist_save_path):
+            print(f"Already processed {file}")
+            print("Skipping...")
+            continue
         min_col, _, min_row, _ = [int(s) 
                 for s in os.path.basename(file).split(".")[0].split("_")[-4:]]
         label = np.load(file.replace("images", "labels"))
@@ -311,19 +358,26 @@ def main(input_path, save_dir):
         # arbitrarily take first point
         longitude = lons[0]
         latitude = lats[0]
+        try:
+            flights = get_flight_candidates(longitude, latitude, time)
+        except RuntimeError:
+            print(f"AFCA failed for {time}")
+            continue
 
-        flights = get_flight_candidates(longitude, latitude, time)
         if len(flights) == 0:
             print(f"No flights found for {time}")
             continue
-        flights = forward_advect_flights(flights, time)
-        flights.to_parquet(os.path.join(save_dir, "flights",
-                                f"{time.strftime('%Y%m%d_%H_%M')}.parquet"),
-                               use_deprecated_int96_timestamps=True)
+        try:
+            flights = forward_advect_flights(flights, time)
+        except RuntimeError:
+            print(f"AFCA failed for {time}")
+            continue       
+        
+        flights.to_parquet(flight_save_path,
+                            use_deprecated_int96_timestamps=True)
         
         df = get_flight_altitude_distribution(flights)
-        df.to_parquet(os.path.join(save_dir, "distributions",
-                                f"{time.strftime('%Y%m%d_%H_%M')}.parquet"),
+        df.to_parquet(dist_save_path,
                                 use_deprecated_int96_timestamps=True)
 
                             
