@@ -49,6 +49,106 @@ RADIUS_EARTH = 6371e3 # m
 MIN_ALTITUDE = 8000 # m
 MAX_ALTITUDE = 15e3 # m
 
+
+def interpolate_flights(df: pd.DataFrame, times: pd.Series, numerical_column,
+                        categorical_columns) -> pd.DataFrame:
+    """
+    Interpolates flights contained within 'df' to the times specified by
+    'times'.
+    Parameters
+    ----------
+    df: pd.DataFrame
+        Dataframe holding flight data
+    times: pd.Series
+        Pandas series holding time data in UTC
+    Returns
+    -------
+    interpolated: pd.DataFrame
+        Dataframe holding interpolated flight data
+    """
+
+    df.time = pd.to_datetime(df.time)
+    new_dfs = []
+
+    # Loop through unique icao24s
+    for icao24 in df.icao24.unique():
+
+        sub_df = df[df.icao24 == icao24].reset_index().set_index('time')
+        
+        
+        to_add = pd.DataFrame({col : np.nan for col in sub_df.columns},
+                                 index=times[(times >= sub_df.index.min())
+                                             *(times <= sub_df.index.max())])
+
+        concat = pd.concat([sub_df, to_add]).sort_index()
+
+        concat[numerical_column] = concat[numerical_column].interpolate(
+                                        method='index')
+        concat[categorical_columns] = concat[categorical_columns].fillna(
+                                        method='ffill')
+        
+
+        new_dfs.append(concat.reset_index().rename(columns={"level_0":"time"}))
+
+    interpolated = pd.concat(new_dfs)[["time"] + numerical_column \
+                                        + categorical_columns]
+    return interpolated
+
+
+
+def filter_waypoints_based_on_distance(flights, contrail_lon, contrail_lat,
+                                       contrail_time, dV=10):
+    """
+    Filters waypoints based on distance to contrail observation, after advection.
+    
+    Parameters
+    ----------
+    flights : pd.DataFrame
+        Flight data, including columns for advected positions
+    contrail_lon : float
+        Longitude of contrail observation
+    contrail_lat : float
+        Latitude of contrail observation
+    contrail_time : dt.datetime
+        Time at which contrail is observed at specified location
+    dV : float
+        Assumed wind speed error, in m / s
+    
+    Returns
+    -------
+    close_flights : pd.DataFrame
+        Flight data filtered based on distance to contrail observation
+    """
+    
+    # Columns to interpolate
+    num_columns = ["longitude", "latitude", "adv_longitude", "adv_latitude",
+                   "pressure_hPa", "altitude", "adv_pressure_hPa"]
+    
+    # Columns to include
+    cat_columns = ["icao24", "callsign"]
+    
+    # Interpolate flights to 1 min frequency to reduce the amount of distance
+    # 'missed' by subsetting 
+    itp_flights = interpolate_flights(flights,
+                        pd.date_range(contrail_time - dt.timedelta(hours=2),
+                        contrail_time,freq="1min"), num_columns, cat_columns)
+    
+    dists_to_contrail = get_haversine(itp_flights['adv_longitude'].values,
+                                    itp_flights['adv_latitude'].values,
+                                    contrail_lon, contrail_lat)
+
+    # Time in seconds over which the contrail would need to advect 
+    # at the assumed wind speed error to reach a particular point
+    # * 1000 to convert from km to m
+    time_to_contrail = dists_to_contrail * 1000 / dV
+
+    advection_time = (contrail_time - itp_flights['time']).dt.total_seconds()
+
+    mask = time_to_contrail <= advection_time
+    
+    return itp_flights[mask]
+    
+
 def get_uncertainty_ellipse(longitude, latitude, time_advected,
                             dV=MAX_WIND_ERROR):  
     """
@@ -215,8 +315,6 @@ def get_flight_candidates(longitude, latitude, time,
         except Exception as e:
             print(t1, t2, polygon_union.bounds)
             raise e
-
-   
     
     # Perform subsetting to obtain flight candidates
     try:
@@ -287,7 +385,7 @@ def get_flight_altitude_distribution(flights):
                         x["latitude"].values.astype(np.float64)[1:],
                         x["longitude"].shift(1).values.astype(np.float64)[1:],
                         x["latitude"].shift(1).values.astype(np.float64)[1:])
-    
+
         # Add this information is a new column
         # Prepend a 0 to account for the first waypoint
         x["dist_km"] = np.hstack((0, dists))
@@ -373,10 +471,16 @@ def main(input_path, save_dir):
         except RuntimeError:
             print(f"AFCA failed for {time}")
             continue       
+
+        # Filter flights based on distance to contrail location
+        flights = filter_waypoints_based_on_distance(flights, longitude,
+                                                    latitude, time)
         
         flights.to_parquet(flight_save_path,
                             use_deprecated_int96_timestamps=True)
-        
+        if len(flights) == 0:
+            print(f"No flights found for {time}")
+            continue
         df = get_flight_altitude_distribution(flights)
         df.to_parquet(dist_save_path,
                                 use_deprecated_int96_timestamps=True)
